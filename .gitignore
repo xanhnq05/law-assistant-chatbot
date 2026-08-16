@@ -1,5 +1,38 @@
-venv/
-.venv/
-.env
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
 
-test/
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Env files (NEVER commit)
+.env
+.env.local
+.env.*.local
+
+# Node / React / Vite
+node_modules/
+dist/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
