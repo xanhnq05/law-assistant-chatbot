@@ -47,3 +47,12 @@ PINECONE_INDEX_NAME = "law-rag-v1"
 
 GROQ_MODEL      = "llama-3.3-70b-versatile"
 EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
+# ============================================================
+# MONGODB
+# ============================================================
+
+MONGODB_URI      = os.getenv("MONGODB_URI")
+MONGODB_USERNAME = os.getenv("MONGODB_USERNAME")
+MONGODB_PASSWORD = os.getenv("MONGODB_PASSWORD")
+DATABASE_NAME    = os.getenv("DATABASE_NAME", "law_assistant")

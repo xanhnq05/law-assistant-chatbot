@@ -5,21 +5,17 @@ Neo4j driver. Created once at startup, closed at shutdown.
 from __future__ import annotations
 
 from langchain_groq import ChatGroq
-from neo4j import GraphDatabase
 from pinecone import Pinecone
 from sentence_transformers import SentenceTransformer
 
 from config import (
     EMBEDDING_MODEL,
     GROQ_MODEL,
-    NEO4J_DATABASE,
-    NEO4J_PASSWORD,
-    NEO4J_URI,
-    NEO4J_USERNAME,
     PINECONE_API_KEY,
     PINECONE_INDEX_NAME,
     log,
 )
+from database import get_neo4j_client
 
 
 class RagEngine:
@@ -29,7 +25,7 @@ class RagEngine:
         self.llm: ChatGroq | None = None
         self.embedder: SentenceTransformer | None = None
         self.pinecone_idx = None
-        self.neo_driver = None
+        self._neo_client = None
 
     def init(self) -> None:
         log.info("Loading LLM (Groq %s) ...", GROQ_MODEL)
@@ -39,10 +35,8 @@ class RagEngine:
         self.embedder = SentenceTransformer(EMBEDDING_MODEL)
 
         log.info("Connecting Neo4j ...")
-        self.neo_driver = GraphDatabase.driver(
-            NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD)
-        )
-        self.neo_driver.verify_connectivity()
+        self._neo_client = get_neo4j_client()
+        self._neo_client.connect()
 
         log.info("Connecting Pinecone ...")
         pc = Pinecone(api_key=PINECONE_API_KEY)
@@ -51,11 +45,14 @@ class RagEngine:
         log.info("RAG engine ready.")
 
     def close(self) -> None:
-        if self.neo_driver:
-            self.neo_driver.close()
+        if self._neo_client:
+            self._neo_client.close()
+            self._neo_client = None
 
     def get_neo_driver(self):
-        return self.neo_driver
+        if self._neo_client is None:
+            return None
+        return self._neo_client.driver
 
     def get_pinecone_index(self):
         return self.pinecone_idx
@@ -66,6 +63,8 @@ class RagEngine:
     def get_llm(self):
         return self.llm
 
-    def neo_session(self):
+    def neo_session(self, database: str | None = None):
         """Convenience: open a Neo4j session against the configured database."""
-        return self.neo_driver.session(database=NEO4J_DATABASE)
+        if self._neo_client is None:
+            raise RuntimeError("RAG engine not initialized. Call init() first.")
+        return self._neo_client.session(database=database)
