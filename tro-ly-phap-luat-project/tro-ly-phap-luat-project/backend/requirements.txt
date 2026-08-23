@@ -1,0 +1,12 @@
+# Auth + chat API (mới thêm)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pyjwt>=2.9
+httpx>=0.27
+python-dotenv>=1.0
+
+# Database (bạn đã dùng sẵn)
+pymongo>=4.8
+
+# --- Merge với requirements hiện có của bạn nếu đã có sẵn ---
+# (groq, langchain, langsmith, neo4j, pinecone-client, ... theo dự án chatbot đang có)
