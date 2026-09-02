@@ -15,7 +15,7 @@ from neo4j import GraphDatabase
 if TYPE_CHECKING:
     from neo4j import Driver, Session
 
-from config import log, NEO4J_DATABASE, NEO4J_PASSWORD, NEO4J_URI, NEO4J_USERNAME
+from core.config import log, NEO4J_DATABASE, NEO4J_PASSWORD, NEO4J_URI, NEO4J_USERNAME
 
 
 class Neo4jClient:
