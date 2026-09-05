@@ -11,7 +11,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from prompts import SYSTEM_ANSWER_GENERATION, SYSTEM_QUERY_UNDERSTANDING
+from rag.prompts import SYSTEM_ANSWER_GENERATION, SYSTEM_QUERY_UNDERSTANDING
 from rag.context import NEO4J_CONTEXT_QUERY, build_citation, build_llm_context
 
 

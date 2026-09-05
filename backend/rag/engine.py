@@ -8,7 +8,7 @@ from langchain_groq import ChatGroq
 from pinecone import Pinecone
 from sentence_transformers import SentenceTransformer
 
-from config import (
+from core.config import (
     EMBEDDING_MODEL,
     GROQ_MODEL,
     PINECONE_API_KEY,

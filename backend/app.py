@@ -8,25 +8,27 @@ Run:
 Module layout:
     app.py         - this file: FastAPI app, lifespan, routes
     config.py      - env vars + logging
-    prompts.py     - LLM system prompts
-    models.py      - Pydantic request/response schemas
+    models.py      - Pydantic request/response schemas (RAG)
+    routers/       - auth_router, chat_router
     rag/
         engine.py  - heavy resources (LLM, embedder, Pinecone, Neo4j)
-        context.py - context formatting + citation builders
         steps.py   - B1/B2/B3 pipeline functions
 """
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
-from config import log
-from models import ChatRequest, ChatResponse, SourceItem
+from core.config import log
+from core.models import ChatRequest, ChatResponse, SourceItem
 from rag.engine import RagEngine
 from rag.steps import step1_query_understanding, step2_retrieval, step3_answer
+from routers import auth_router, chat_router
 
 
 # ============================================================
@@ -38,17 +40,46 @@ engine = RagEngine()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    engine.init()
+    try:
+        engine.init()
+    except Exception as exc:
+        log.exception("RAG engine init failed: %s", exc)
     yield
     engine.close()
 
 
 app = FastAPI(title="RAG Chatbot - Luật GTĐB", lifespan=lifespan)
 
-# CORS cho frontend dev (Vite mặc định port 5173)
+# SessionMiddleware bắt buộc cho Authlib OAuth (lưu state chống CSRF).
+# Đổi secret_key thành giá trị random an toàn trong production.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("JWT_SECRET_KEY", "tlpl-dev-secret-change-me"),
+    same_site="lax",
+    https_only=False,  # dev: chưa cần HTTPS
+)
+
+
+# ============================================================
+# CORS - whitelist frontend
+# ============================================================
+# Mặc định cho phép localhost dev + URL đã cấu hình trong FRONTEND_URL.
+# Trong production nên set FRONTEND_URL=https://your-frontend.com.
+_allowed_origins = [
+    os.getenv("FRONTEND_URL", "http://localhost:5500").rstrip("/"),
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+# de-dup + loại bỏ None / rỗng
+_allowed_origins = [o for o in {o for o in _allowed_origins if o}]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,6 +95,23 @@ def health():
     return {"status": "ok", "service": "rag-chatbot"}
 
 
+# ============================================================
+# AUTH ROUTES
+# ============================================================
+
+app.include_router(auth_router)
+
+# ============================================================
+# CHAT HISTORY ROUTES
+# ============================================================
+
+app.include_router(chat_router)
+
+
+# ============================================================
+# RAG PUBLIC CHAT (không cần auth)
+# ============================================================
+
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     """B1 → B2 → B3 pipeline."""
@@ -75,11 +123,10 @@ def chat(req: ChatRequest):
     try:
         # B1 - Query Understanding
         understood = step1_query_understanding(engine.get_llm(), req.question)
-        # B2 - Retrieval (Pinecone + Neo4j)
+        # B2 - Retrieval
         blocks = step2_retrieval(engine, understood["reformulated_query"], req.top_k)
-        # B3 - Answer Generation
+        # B3 - Answer
         answer = step3_answer(engine.get_llm(), req.question, blocks)
-
         return ChatResponse(
             answer=answer,
             sources=[SourceItem(
