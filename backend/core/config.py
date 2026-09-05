@@ -48,6 +48,10 @@ PINECONE_INDEX_NAME = "law-rag-v1"
 GROQ_MODEL      = "llama-3.3-70b-versatile"
 EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
+# Frontend base URL (dùng để redirect sau OAuth callback).
+# Trong dev: http://localhost:5500 (mở frontend qua http-server).
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5500")
+
 # ============================================================
 # MONGODB
 # ============================================================

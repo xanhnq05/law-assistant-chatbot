@@ -19,7 +19,7 @@ from pymongo.database import Database
 if TYPE_CHECKING:
     from pymongo.collection import Collection
 
-from config import log, MONGODB_PASSWORD, MONGODB_URI, MONGODB_USERNAME, DATABASE_NAME
+from core.config import log, MONGODB_PASSWORD, MONGODB_URI, MONGODB_USERNAME, DATABASE_NAME
 
 
 class MongoDBClient:
