@@ -1,0 +1,28 @@
+# Docker build context cho rag-service (root = backend/)
+.git/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+.venv/
+venv/
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+**/*.md
+**/README*
+**/LICENSE*
+**/Dockerfile
+**/docker-compose*.yml
+**/.dockerignore
+**/tests/
+
+# rag-service KHÔNG cần các service khác lúc build
+services/auth-service/
+services/chat-service/
+services/__pycache__/
+**/*.log
+.env.local

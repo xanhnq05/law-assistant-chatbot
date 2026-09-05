@@ -1,0 +1,19 @@
+# Docker build context cho frontend
+.git/
+.gitignore
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+node_modules/
+*.log
+
+# Bỏ qua Dockerfile của chính nó và các artifact không cần
+**/Dockerfile
+**/docker-compose*.yml
+**/.dockerignore
+
+# README không cần trong image
+README.md

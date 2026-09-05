@@ -1,0 +1,61 @@
+# Docker build context bỏ qua các file không cần thiết — giảm dung lượng image
+# và tăng tốc độ build.
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python cache & venv
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+.venv/
+venv/
+env/
+ENV/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker artifacts (đệ quy)
+**/Dockerfile
+**/docker-compose*.yml
+**/.dockerignore
+
+# Documentation / sample data không cần cho runtime
+**/*.md
+**/README*
+**/LICENSE*
+
+# Logs & secrets
+**/*.log
+**/secrets/
+.env.local
+.env.*.local
+
+# Frontend — bỏ qua assets không cần
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+frontend/coverage/
+
+# Data import — không phải runtime service
+data_import/
+doc/
+
+# Backend tests
+**/tests/

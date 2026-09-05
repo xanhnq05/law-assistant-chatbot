@@ -1,11 +1,7 @@
-"""MongoDB connection singleton using PyMongo.
+"""MongoDB connection for chat-service.
 
-Used by the RAG gateway (backend/app.py) for the connection-test
-script and any code that needs MongoDB access at gateway level.
-
-NOTE: Microservices (auth-service, chat-service) have their own
-copy at services/<svc>/app/db/mongo_client.py — keep them in sync
-if you change anything here.
+Mirror of backend/database/mongo_client.py — share cùng MongoDB cluster
+với auth-service (chỉ khác service name trong log).
 """
 from __future__ import annotations
 
@@ -17,7 +13,7 @@ from pymongo.database import Database
 if TYPE_CHECKING:
     from pymongo.collection import Collection
 
-from core.config import (
+from app.core.config import (
     DATABASE_NAME,
     MONGODB_PASSWORD,
     MONGODB_URI,
@@ -27,8 +23,6 @@ from core.config import (
 
 
 class MongoDBClient:
-    """Thread-safe MongoDB client wrapper with lazy initialization."""
-
     _instance: MongoDBClient | None = None
     _client: MongoClient | None = None
 

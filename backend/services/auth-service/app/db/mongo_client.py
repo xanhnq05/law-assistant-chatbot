@@ -1,11 +1,6 @@
-"""MongoDB connection singleton using PyMongo.
+"""MongoDB connection singleton for the auth-service.
 
-Used by the RAG gateway (backend/app.py) for the connection-test
-script and any code that needs MongoDB access at gateway level.
-
-NOTE: Microservices (auth-service, chat-service) have their own
-copy at services/<svc>/app/db/mongo_client.py — keep them in sync
-if you change anything here.
+Mirror of backend/database/mongo_client.py but scoped to this service.
 """
 from __future__ import annotations
 
@@ -17,7 +12,7 @@ from pymongo.database import Database
 if TYPE_CHECKING:
     from pymongo.collection import Collection
 
-from core.config import (
+from app.core.config import (
     DATABASE_NAME,
     MONGODB_PASSWORD,
     MONGODB_URI,
@@ -38,6 +33,7 @@ class MongoDBClient:
         return cls._instance
 
     def connect(self) -> MongoClient:
+        """Establish connection to MongoDB. Idempotent."""
         if self._client is None:
             log.info("Connecting MongoDB at %s ...", MONGODB_URI)
             self._client = MongoClient(
@@ -51,25 +47,32 @@ class MongoDBClient:
         return self._client
 
     def close(self) -> None:
+        """Close the client if open."""
         if self._client is not None:
             self._client.close()
             self._client = None
             log.info("MongoDB connection closed.")
 
     def get_database(self, name: str | None = None) -> Database:
-        return self.connect()[name or DATABASE_NAME]
+        """Get a database by name, defaulting to DATABASE_NAME."""
+        db_name = name or DATABASE_NAME
+        return self.connect()[db_name]
 
     def get_collection(self, collection: str, database: str | None = None) -> Collection:
+        """Get a collection from the specified database."""
         return self.get_database(database)[collection]
 
     @property
     def client(self) -> MongoClient:
+        """Get the active client, connecting if necessary."""
         return self.connect()
 
 
 def get_mongo_client() -> MongoDBClient:
+    """Get or create the global MongoDB client instance."""
     return MongoDBClient()
 
 
 def get_database(name: str | None = None) -> Database:
+    """Convenience function to get a database directly."""
     return get_mongo_client().get_database(name)

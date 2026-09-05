@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/legal-traffic-schema.json",
+  "title": "Vietnamese Road Traffic Legal Document Schema",
+  "description": "Canonical schema for Vietnamese road-traffic legal documents used by the RAG pipeline (Pinecone + Neo4j).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["document", "chapters", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.1.0",
+      "description": "Fixed schema version. Do not change unless the schema itself is intentionally revised."
+    },
+    "document": {
+      "$ref": "#/$defs/document"
+    },
+    "chapters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/chapter"
+      }
+    }
+  },
+  "$defs": {
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "number",
+        "title",
+        "type",
+        "source_file",
+        "status",
+        "date_enacted",
+        "date_effective",
+        "issuing_authority"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique document ID used as the root identifier and Neo4j/Pinecone reference."
+        },
+        "number": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Official document number, e.g. 36/2024/QH15 or 168/2024/NĐ-CP."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Document type. Use type, not document_type."
+        },
+        "source_file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "date_enacted": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "date_effective": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "issuing_authority": {
+          "type": "string",
+          "minLength": 1
+        },
+        "part_note": {
+          "type": "string"
+        },
+        "effective_date_notes": {
+          "type": "string"
+        },
+        "source_version": {
+          "type": "string"
+        }
+      }
+    },
+    "chapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "document_id", "number", "title", "sections", "articles"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "number": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/section"
+          }
+        },
+        "articles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/article"
+          }
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "document_id", "chapter_id", "number", "title", "articles"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chapter_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "number": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "articles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/article"
+          }
+        }
+      }
+    },
+    "article": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "document_id", "chapter_id", "section_id", "number", "title", "text", "clauses"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chapter_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "section_id": {
+          "type": ["string", "null"]
+        },
+        "number": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "clauses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/clause"
+          }
+        }
+      }
+    },
+    "clause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "document_id", "article_id", "number", "text", "points"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "article_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "number": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/point"
+          }
+        }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "document_id", "clause_id", "number", "text"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clause_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "number": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Point label such as a, b, c, đ, e..."
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,110 +1,60 @@
-# Trợ lý Luật Giao thông - RAG Chatbot
+# Trợ Lý Pháp Luật - RAG Chatbot
 
-Hệ thống truy xuất và trả lời câu hỏi về Luật Trật tự, An toàn Giao thông Đường bộ (Việt Nam).
+Hệ thống chatbot pháp luật Việt Nam (Google OAuth + MongoDB + RAG pipeline).
 
-## Kiến trúc
+## Chạy bằng Docker
 
+Yêu cầu: [Docker Desktop](https://www.docker.com/products/docker-desktop/) đã cài.
+
+### 1. Chuẩn bị `.env`
+
+File `.env` ở thư mục gốc dự án đã có sẵn secret — cứ dùng luôn. Nếu muốn thay đổi, sửa trực tiếp file đó (KHÔNG commit lên git).
+
+Đảm bảo 2 URL Google OAuth trong `.env` đã được add vào Google Cloud Console → Authorized redirect URIs:
 ```
-docs/             # JSON văn bản luật (input)
-       |
-       v
-data_import/      # Scripts đẩy data lên DB
-   |        |
-   v        v
- Neo4j   Pinecone       (knowledge layer)
-   |        |
-   +--+-----+
-      v
-backend/          # FastAPI server (RAG pipeline B1->B2->B3)
-      |
-      v
-frontend/         # React chat UI
-```Pipeline RAG (trong `backend/app.py`):
-- **B1 Query Understanding** - Groq LLM tái cấu trúc câu hỏi
-- **B2 Retrieval** - Pinecone (vector) + Neo4j (graph context)
-- **B3 Answer Generation** - Groq LLM trả lời + trích dẫn
-
-## Cấu trúc thư mục
-
-```
-tro_ly_luat/
-├── backend/           # FastAPI server
-│   ├── app.py         # Main app với /api/chat
-│   ├── requirements.txt
-│   ├── .env           # API keys (không commit)
-│   └── env_example
-├── frontend/          # React + Vite
-│   ├── src/App.jsx
-│   ├── package.json
-│   └── vite.config.js # Proxy /api -> backend :8000
-├── data_import/       # Scripts seed data vào Neo4j + Pinecone
-│   ├── import_data_neo4j.py
-│   ├── import_data_pinecone.py
-│   └── requirements.txt
-├── docs/              # JSON luật (source of truth)
-└── .gitignore
+http://localhost:8080/auth/google/callback
 ```
 
-## Cài đặt
+### 2. Build & chạy
 
-### 1. Backend
-
-```bash
-cd backend
-python -m pip install -r requirements.txt
-cp env_example .env
-# Sửa .env: điền GROQ_API_KEY, NEO4J_*, PINECONE_API_KEY
-python -m uvicorn app:app --reload --port 8000
+```powershell
+docker compose up --build
 ```
 
-### 2. Import data (chỉ chạy 1 lần khi setup)
+Lần đầu sẽ mất ~5 phút để build image (chủ yếu do chat-service cài pymongo + authlib).
 
-```bash
-cd data_import
-python -m pip install -r requirements.txt
-python import_data_neo4j.py    # JSON -> Neo4j graph
-python import_data_pinecone.py # JSON -> Pinecone vectors
-```
+### 3. Truy cập
 
-### 3. Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## API
-
-### `POST /api/chat`
-
-Request:
-```json
-{ "question": "...", "top_k": 5 }
-```
-
-Response:
-```json
-{
-  "answer": "Câu trả lời...",
-  "sources": [
-    { "citation": "Điều 30, Khoản 1", "score": 0.85, "context_block": "..." }
-  ],
-  "debug": {
-    "reformulated_query": "...",
-    "legal_domain": "...",
-    "key_legal_terms": []
-  }
-}
-```
-
-## Stack
-
-| Layer | Tech |
+| URL | Dùng để |
 |---|---|
-| Vector DB | Pinecone (384 dim, cosine) |
-| Graph DB | Neo4j Aura |
-| Embedding | sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 (local) |
-| LLM | Groq llama-3.3-70b-versatile |
-| Backend | FastAPI + uvicorn |
-| Frontend | React 18 + Vite |
+| http://localhost:8080 | Frontend (UI chat) |
+| http://localhost:8001/docs | Swagger auth-service |
+| http://localhost:8002/docs | Swagger chat-service |
+
+### 4. Các lệnh thường dùng
+
+```powershell
+# Xem log tất cả container
+docker compose logs -f
+
+# Log riêng 1 service
+docker compose logs -f chat-service
+
+# Rebuild 1 service sau khi sửa code
+docker compose up --build auth-service
+
+# Dừng (giữ image, dữ liệu)
+docker compose down
+
+# Dừng + xoá image (clean slate)
+docker compose down --rmi all
+```
+
+### 5. Lưu ý
+
+- **rag-service đang tắt** trong `docker-compose.yml`. Khi đó:
+  - `chat-service` không trả lời được câu hỏi (sẽ trả fallback "RAG chưa sẵn sàng").
+  - Frontend gọi `/api/chat` sẽ nhận 503.
+  - Khi muốn bật lại: mở `docker-compose.yml`, uncomment block `rag-service` + bật `depends_on` trong chat-service + bật block `/api/` trong `frontend/nginx.conf`.
+
+- **JWT_SECRET_KEY** phải giống nhau giữa `auth-service` và `chat-service`. File `.env` ở root + các `.env` trong từng service đã được set đồng bộ.

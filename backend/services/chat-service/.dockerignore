@@ -1,0 +1,24 @@
+# Docker build context cho chat-service
+.git/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+.venv/
+venv/
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+**/*.md
+**/README*
+**/LICENSE*
+**/Dockerfile
+**/docker-compose*.yml
+**/.dockerignore
+**/tests/
+
+**/*.log
+.env.local

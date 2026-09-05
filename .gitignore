@@ -19,6 +19,14 @@ env/
 .env.local
 .env.*.local
 
+# Env files inside service subfolders
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Kept safe — committed templates without secrets
+!.env.example
+
 # Node / React / Vite
 node_modules/
 dist/

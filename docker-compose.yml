@@ -1,0 +1,108 @@
+# ============================================================
+# Docker Compose — Trợ Lý Pháp Luật
+#
+# Chạy: docker compose up --build
+# Dừng: docker compose down
+# Log:  docker compose logs -f chat-service
+#
+# Tất cả biến môi trường load từ backend/.env (duy nhất).
+# Không cần file .env riêng ở root hay ở từng service.
+# ============================================================
+
+services:
+  auth-service:
+    build:
+      context: ./backend/services/auth-service
+      dockerfile: Dockerfile
+    image: tro-ly-luat/auth-service:latest
+    container_name: tlpl-auth
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override service-specific
+      AUTH_SERVICE_PORT: "8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - tlpl-net
+
+  chat-service:
+    build:
+      context: ./backend/services/chat-service
+      dockerfile: Dockerfile
+    image: tro-ly-luat/chat-service:latest
+    container_name: tlpl-chat
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override service-specific
+      CHAT_SERVICE_PORT: "8002"
+    # rag-service đang tắt (xem comment ở service rag-service phía dưới).
+    # Khi bật lại thì thêm vào depends_on:
+    #   - rag-service
+    depends_on: []
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8002/', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - tlpl-net
+
+  # rag-service:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: services/rag-service/Dockerfile
+  #   image: tro-ly-luat/rag-service:latest
+  #   container_name: tlpl-rag
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8003:8003"
+  #   env_file:
+  #     - ./backend/.env
+  #   healthcheck:
+  #     test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8003/', timeout=3).status==200 else 1)"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  #     start_period: 30s
+  #   networks:
+  #     - tlpl-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: tro-ly-luat/frontend:latest
+    container_name: tlpl-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - auth-service
+      - chat-service
+      # rag-service đang tắt; bật lại thì thêm:
+      # - rag-service
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - tlpl-net
+
+networks:
+  tlpl-net:
+    driver: bridge
+    name: tlpl-net
