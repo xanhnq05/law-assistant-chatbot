@@ -47,10 +47,10 @@ services:
     environment:
       # Override service-specific
       CHAT_SERVICE_PORT: "8002"
-    # rag-service đang tắt (xem comment ở service rag-service phía dưới).
-    # Khi bật lại thì thêm vào depends_on:
-    #   - rag-service
-    depends_on: []
+    # rag-service đã bật lại (xem block phía dưới).
+    depends_on:
+      - auth-service
+      - rag-service
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8002/', timeout=3).status==200 else 1)"]
       interval: 30s
@@ -60,25 +60,26 @@ services:
     networks:
       - tlpl-net
 
-  # rag-service:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: services/rag-service/Dockerfile
-  #   image: tro-ly-luat/rag-service:latest
-  #   container_name: tlpl-rag
-  #   restart: unless-stopped
-  #   ports:
-  #     - "8003:8003"
-  #   env_file:
-  #     - ./backend/.env
-  #   healthcheck:
-  #     test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8003/', timeout=3).status==200 else 1)"]
-  #     interval: 30s
-  #     timeout: 5s
-  #     retries: 3
-  #     start_period: 30s
-  #   networks:
-  #     - tlpl-net
+  rag-service:
+    build:
+      context: ./backend/services/rag-service
+      dockerfile: Dockerfile
+    image: tro-ly-luat/rag-service:latest
+    container_name: tlpl-rag
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    env_file:
+      - ./backend/.env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8003/', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - tlpl-net
+
 
   frontend:
     build:
@@ -92,8 +93,7 @@ services:
     depends_on:
       - auth-service
       - chat-service
-      # rag-service đang tắt; bật lại thì thêm:
-      # - rag-service
+      - rag-service
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
       interval: 30s

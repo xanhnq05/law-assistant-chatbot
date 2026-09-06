@@ -1,7 +1,12 @@
 """
-Neo4j connection singleton.
+Neo4j connection singleton - self-contained trong rag-service.
+
+rag-service tự khởi tạo + đóng driver Neo4j; không phụ thuộc
+service khác.
 
 Usage:
+    from db.neo4j_client import get_neo4j_client
+
     client = get_neo4j_client()
     with client.session() as session:
         result = session.run("MATCH (n) RETURN count(n)")
@@ -15,11 +20,17 @@ from neo4j import GraphDatabase
 if TYPE_CHECKING:
     from neo4j import Driver, Session
 
-from core.config import log, NEO4J_DATABASE, NEO4J_PASSWORD, NEO4J_URI, NEO4J_USERNAME
+from app.core.config import (
+    NEO4J_DATABASE,
+    NEO4J_PASSWORD,
+    NEO4J_URI,
+    NEO4J_USERNAME,
+    log,
+)
 
 
 class Neo4jClient:
-    """Thread-safe Neo4j driver wrapper with lazy initialization."""
+    """Thread-safe Neo4j driver wrapper với lazy initialization."""
 
     _instance: Neo4jClient | None = None
     _driver: Driver | None = None
@@ -30,7 +41,7 @@ class Neo4jClient:
         return cls._instance
 
     def connect(self) -> Driver:
-        """Establish connection to Neo4j. Idempotent."""
+        """Khởi tạo driver. Idempotent."""
         if self._driver is None:
             log.info("Connecting Neo4j at %s ...", NEO4J_URI)
             self._driver = GraphDatabase.driver(
@@ -38,27 +49,26 @@ class Neo4jClient:
                 auth=(NEO4J_USERNAME, NEO4J_PASSWORD),
             )
             self._driver.verify_connectivity()
-            log.info("Neo4j connected successfully.")
+            log.info("Neo4j connected.")
         return self._driver
 
     def close(self) -> None:
-        """Close the driver if open."""
+        """Đóng driver nếu đang mở."""
         if self._driver is not None:
             self._driver.close()
             self._driver = None
             log.info("Neo4j connection closed.")
 
     def session(self, database: str | None = None) -> Session:
-        """Open a new session against the configured database."""
+        """Mở session mới với database được config."""
         db = database or NEO4J_DATABASE
         return self.connect().session(database=db)
 
     @property
     def driver(self) -> Driver:
-        """Get the active driver, connecting if necessary."""
         return self.connect()
 
 
 def get_neo4j_client() -> Neo4jClient:
-    """Get or create the global Neo4j client instance."""
+    """Singleton accessor."""
     return Neo4jClient()

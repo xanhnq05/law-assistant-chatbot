@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from pymongo.collection import Collection
 
 from core.config import (
-    DATABASE_NAME,
     MONGODB_PASSWORD,
     MONGODB_URI,
     MONGODB_USERNAME,
