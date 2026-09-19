@@ -16,7 +16,8 @@ class ChatMessage(BaseModel):
 
 
 class AddMessageRequest(BaseModel):
-    session_id: str
+    # session_id đã có ở URL path → không cần trong body.
+    # Bỏ qua để tránh trùng lặp và giảm sai sót.
     role: str = Field(..., pattern="^(user|assistant|system)$")
     content: str
     sources: List[dict] = Field(default_factory=list)

@@ -16,7 +16,10 @@ export const useAuth = () => {
     clearError,
   } = useAuthStore();
 
-  const isAuthenticated = !!accessToken && !!user;
+  // Authenticated khi CẢ accessToken VÀ user đều có (persist từ localStorage).
+  // accessToken dùng để gọi API (axios interceptor tự gắn vào header).
+  // user dùng để hiển thị UI (avatar, tên, sidebar).
+  const isAuthenticated = !!(accessToken && user);
 
   return {
     accessToken,

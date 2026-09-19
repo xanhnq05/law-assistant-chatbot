@@ -21,6 +21,12 @@ class ChatRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
     # Cho phép user bật/tắt verification (mặc định bật để đảm bảo chất lượng).
     verify: bool = Field(default=True)
+    # Multi-turn context: danh sách các message gần đây (tối đa 3 cặp = 6 message).
+    # Giới hạn để tránh hết context window của LLM.
+    history: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="List of {role, content} messages from recent conversation. Max 6.",
+    )
 
 
 # ============================================================

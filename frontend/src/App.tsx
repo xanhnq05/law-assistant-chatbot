@@ -15,19 +15,31 @@ import { useAuthStore } from "@/store/useAuthStore";
  *
  * Khi OAuth callback redirect về URL có #token=xxx, App tự parse token và
  * gọi /auth/me để lấy thông tin user. Sau đó clear hash khỏi URL.
+ *
+ * Khi reload trang (đã đăng nhập trước đó), App tự động fetch lại user info
+ * từ localStorage để khôi phục trạng thái đăng nhập.
  */
 function App() {
   const parseOAuthToken = useAuthStore((s) => s.parseOAuthToken);
+  const fetchMe = useAuthStore((s) => s.fetchMe);
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const user = useAuthStore((s) => s.user);
 
+  // 1) OAuth callback: parse #token= từ URL
   useEffect(() => {
-    // Khi OAuth callback redirect về, URL có dạng: http://localhost:5173/#token=xxx
     if (window.location.hash) {
       parseOAuthToken(window.location.hash).finally(() => {
-        // Xoá hash khỏi URL để tránh parse lại khi refresh
         window.history.replaceState(null, "", window.location.pathname);
       });
     }
   }, [parseOAuthToken]);
+
+  // 2) Reload page: có accessToken nhưng chưa có user → fetch lại
+  useEffect(() => {
+    if (accessToken && !user) {
+      fetchMe();
+    }
+  }, [accessToken, user, fetchMe]);
 
   return (
     <BrowserRouter>

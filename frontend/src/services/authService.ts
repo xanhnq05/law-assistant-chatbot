@@ -1,14 +1,14 @@
-import { axiosInstance } from "@/lib/axios";
+import { authApi } from "@/lib/services";
 
 /**
- * Auth service - chỉ xử lý Google OAuth.
+ * Auth service - chỉ xử lý Google OAuth + user info.
  *
- * Backend endpoints:
- * - GET  /api/auth/google/login      → redirect Google OAuth
- * - GET  /api/auth/google/callback   → Google redirect về, trả #token=<jwt>
- * - GET  /api/auth/me                → lấy thông tin user (cần JWT)
- * - POST /api/auth/refresh           → đổi refresh token → access token mới
- * - POST /api/auth/logout            → đăng xuất
+ * Backend endpoints (chạy trực tiếp từ browser, không cần Vite proxy):
+ * - GET  /auth/google/login        → bắt đầu Google OAuth
+ * - GET  /auth/google/callback     → Google redirect về, trả #token=<jwt>
+ * - GET  /auth/me                  → lấy thông tin user (cần JWT)
+ * - POST /auth/refresh             → đổi refresh token → access token mới
+ * - POST /auth/logout              → đăng xuất
  */
 
 // ===== Types =====
@@ -30,11 +30,10 @@ export interface RefreshResponse {
 }
 
 const API = {
-  googleLogin: "/api/auth/google/login",
-  googleCallback: "/api/auth/google/callback",
-  me: "/api/auth/me",
-  refresh: "/api/auth/refresh",
-  logout: "/api/auth/logout",
+  googleLogin: "/auth/google/login",
+  me: "/auth/me",
+  refresh: "/auth/refresh",
+  logout: "/auth/logout",
 };
 
 // ===== API calls =====
@@ -44,24 +43,23 @@ export const authService = {
    * Browser redirect tới đây → Google → callback → redirect về frontend/#token=xxx
    */
   getGoogleOAuthUrl(): string {
-    const baseURL = import.meta.env.VITE_API_URL || "http://localhost:8080";
-    return `${baseURL}${API.googleLogin}`;
+    return `${import.meta.env.VITE_AUTH_SERVICE_URL || "http://localhost:8001"}${API.googleLogin}`;
   },
 
   /** Lấy thông tin user hiện tại từ JWT */
   async getMe(): Promise<User> {
-    const { data } = await axiosInstance.get<User>(API.me);
+    const { data } = await authApi.get<User>(API.me);
     return data;
   },
 
-  /** Gọi refresh endpoint để lấy access token mới (cookie tự gửi) */
+  /** Gọi refresh endpoint (cookie tự gửi) để lấy access token mới */
   async refreshToken(): Promise<RefreshResponse> {
-    const { data } = await axiosInstance.post<RefreshResponse>(API.refresh);
+    const { data } = await authApi.post<RefreshResponse>(API.refresh);
     return data;
   },
 
   /** Đăng xuất */
   async signOut(): Promise<void> {
-    await axiosInstance.post(API.logout);
+    await authApi.post(API.logout);
   },
 };

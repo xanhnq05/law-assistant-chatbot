@@ -1,10 +1,13 @@
-import { axiosInstance } from "@/lib/axios";
+import { chatApi } from "@/lib/services";
 
 /**
- * Chat service - gọi API tới backend chat-service.
+ * Chat service - gọi API tới chat-service (port 8002).
  *
- * Tất cả endpoints đều yêu cầu JWT (Authorization: Bearer token).
- * axiosInstance đã tự gắn token + handle refresh tự động.
+ * Tất cả endpoints yêu cầu JWT (Authorization: Bearer token).
+ * axios chatApi tự gắn token. Nếu 401 → caller handle (clear token, về guest).
+ *
+ * QUAN TRỌNG: Backend trả về field `message_id`, `session_id`, `created_at`
+ * (snake_case). Frontend dùng `id`, `createdAt` (camelCase).
  */
 
 export interface ChatSessionResponse {
@@ -31,36 +34,54 @@ export interface SourceResponse {
 }
 
 const CHAT_API = {
-  list: "/api/chats/",
-  create: "/api/chats/",
-  get: (id: string) => `/api/chats/${id}`,
-  updateTitle: (id: string) => `/api/chats/${id}`,
-  delete: (id: string) => `/api/chats/${id}`,
-  addMessage: (sessionId: string) => `/api/chats/${sessionId}/messages`,
+  list: "/chats/",
+  create: "/chats/",
+  get: (id: string) => `/chats/${id}`,
+  updateTitle: (id: string) => `/chats/${id}`,
+  delete: (id: string) => `/chats/${id}`,
+  addMessage: (sessionId: string) => `/chats/${sessionId}/messages`,
 };
+
+// ============================================================
+// Mappers: snake_case (backend) → camelCase (frontend)
+// ============================================================
+function mapMessage(m: any): ChatMessageResponse {
+  return {
+    id: m.message_id ?? m.id ?? "",
+    role: m.role,
+    content: m.content,
+    sources: m.sources,
+    createdAt: m.created_at ?? m.createdAt ?? new Date().toISOString(),
+  };
+}
+
+function mapSession(s: any): ChatSessionResponse {
+  return {
+    id: s.session_id ?? s.id ?? "",
+    title: s.title ?? "Đoạn chat mới",
+    messages: Array.isArray(s.messages) ? s.messages.map(mapMessage) : [],
+    createdAt: s.created_at ?? s.createdAt ?? new Date().toISOString(),
+    updatedAt: s.updated_at ?? s.updatedAt ?? new Date().toISOString(),
+  };
+}
 
 export const chatService = {
   /** Lấy toàn bộ lịch sử chat của user */
   async getHistory(): Promise<ChatSessionResponse[]> {
-    const { data } = await axiosInstance.get<ChatSessionResponse[]>(CHAT_API.list);
-    return data;
+    const { data } = await chatApi.get<any[]>(CHAT_API.list);
+    return data.map(mapSession);
   },
 
   /** Tạo session chat mới */
   async createSession(title?: string): Promise<ChatSessionResponse> {
-    const { data } = await axiosInstance.post<ChatSessionResponse>(
-      CHAT_API.create,
-      { title }
-    );
-    return data;
+    const { data } = await chatApi.post<any>(CHAT_API.create, { title });
+    return mapSession(data);
   },
 
   /** Lấy 1 session */
   async getSession(sessionId: string): Promise<ChatSessionResponse> {
-    const { data } = await axiosInstance.get<ChatSessionResponse>(
-      CHAT_API.get(sessionId)
-    );
-    return data;
+    const { data } = await chatApi.get<any>(CHAT_API.get(sessionId));
+    return mapSession(data);
   },
 
   /** Đổi title session */
@@ -68,16 +89,15 @@ export const chatService = {
     sessionId: string,
     title: string
   ): Promise<ChatSessionResponse> {
-    const { data } = await axiosInstance.patch<ChatSessionResponse>(
-      CHAT_API.updateTitle(sessionId),
-      { title }
-    );
-    return data;
+    const { data } = await chatApi.patch<any>(CHAT_API.updateTitle(sessionId), {
+      title,
+    });
+    return mapSession(data);
   },
 
   /** Xoá session */
   async deleteSession(sessionId: string): Promise<void> {
-    await axiosInstance.delete(CHAT_API.delete(sessionId));
+    await chatApi.delete(CHAT_API.delete(sessionId));
   },
 
   /** Gửi tin nhắn + nhận reply (RAG tự động sinh assistant message) */
@@ -85,14 +105,11 @@ export const chatService = {
     sessionId: string,
     content: string
   ): Promise<ChatSessionResponse> {
-    const { data } = await axiosInstance.post<ChatSessionResponse>(
-      CHAT_API.addMessage(sessionId),
-      {
-        role: "user",
-        content,
-        sources: [],
-      }
-    );
-    return data;
+    const { data } = await chatApi.post<any>(CHAT_API.addMessage(sessionId), {
+      role: "user",
+      content,
+      sources: [],
+    });
+    return mapSession(data);
   },
 };

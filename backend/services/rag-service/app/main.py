@@ -3,7 +3,7 @@
 Run local:
     cd backend
     $env:PYTHONPATH="backend;backend/services/rag-service"
-    uvicorn services.rag-service.app.main:app --reload --port 8003
+    python -m uvicorn app.main:app --reload --port 8003
 
 Run Docker:
     docker compose up rag-service

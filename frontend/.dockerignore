@@ -1,0 +1,12 @@
+# Frontend dockerignore — bỏ qua khi build image
+node_modules
+dist
+.vite
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.vscode
+.idea
+coverage
+.eslintcache

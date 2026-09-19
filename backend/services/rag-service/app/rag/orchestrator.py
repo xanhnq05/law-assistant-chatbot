@@ -57,6 +57,7 @@ def run_pipeline(
     question: str,
     top_k: int = 5,
     verify: bool = True,
+    history: list[dict[str, str]] | None = None,
 ) -> ChatResponse:
     """
     Chạy đầy đủ 7-step pipeline và trả về ChatResponse.
@@ -67,8 +68,12 @@ def run_pipeline(
       B3. Embedding
       B4. Hybrid Retrieval (Pinecone + Neo4j + relationships)
       B5. Context Builder
-      B6. LLM Generation (Groq)
+      B6. LLM Generation (Groq) — nhận thêm history để multi-turn
       B7. Symbolic Verification (hybrid rule + LLM-as-Judge)
+
+    Args:
+        history: danh sách {role: "user"|"assistant", content: str} gần đây.
+                 Tối đa 3 cặp (6 message) để tránh hết context window.
     """
     if engine.get_llm() is None:
         raise RuntimeError("RAG engine chưa được khởi tạo. Gọi engine.init() trước.")
@@ -114,11 +119,12 @@ def run_pipeline(
     # ============================================================
     # B6 - LLM GENERATION
     # ============================================================
-    log.info("[B6] Generating answer via Groq ...")
+    log.info("[B6] Generating answer via Groq (history=%d msgs) ...", len(history or []))
     state.answer = step_generate_answer(
         engine.get_llm(),
         question,
         state.context_text,
+        history=history,
     )
 
     # ============================================================

@@ -24,8 +24,14 @@ from dotenv import load_dotenv
 # ============================================================
 # File .env ở thư mục gốc `backend/` chứa toàn bộ secrets.
 # Service-local .env (nếu có) sẽ override.
-_BACKEND_DIR = Path(__file__).resolve().parents[3]  # = backend/
-_SERVICE_DIR = Path(__file__).resolve().parents[2]  # = backend/services/rag-service/
+# Path layout: backend/services/rag-service/app/core/config.py
+#   parents[0] = app/core/
+#   parents[1] = app/
+#   parents[2] = rag-service/
+#   parents[3] = services/
+#   parents[4] = backend/         ← đây là root
+_BACKEND_DIR = Path(__file__).resolve().parents[4]  # = backend/
+_SERVICE_DIR = Path(__file__).resolve().parents[3]  # = backend/services/rag-service/
 
 for candidate in [
     _SERVICE_DIR / ".env",       # ưu tiên service-local

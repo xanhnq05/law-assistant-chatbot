@@ -20,7 +20,7 @@ class ChatSession(BaseModel):
 
 
 class CreateChatRequest(BaseModel):
-    title: str = "Cuộc trò chuyện mới"
+    title: str = "Đoạn chat mới"
 
 
 class UpdateChatRequest(BaseModel):
@@ -29,7 +29,7 @@ class UpdateChatRequest(BaseModel):
 
 class ChatSessionResponse(BaseModel):
     session_id: str
-    user_id: str
+    user_id: Optional[str] = None
     title: str
     messages: List[ChatMessage]
     created_at: datetime

@@ -80,7 +80,26 @@ export const useAuthStore = create<AuthState>()(
         try {
           const user = await authService.getMe();
           set({ user, loading: false });
-        } catch {
+        } catch (err) {
+          // 401/403 → thử refresh 1 lần
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          if (status === 401 || status === 403) {
+            try {
+              const refreshed = await authService.refreshToken();
+              localStorage.setItem("accessToken", refreshed.accessToken);
+              set({ accessToken: refreshed.accessToken });
+              const user = await authService.getMe();
+              set({ user, loading: false });
+              return;
+            } catch {
+              // Refresh fail → về guest
+              localStorage.removeItem("accessToken");
+              localStorage.removeItem("user");
+              set({ accessToken: null, user: null, loading: false });
+              return;
+            }
+          }
+          // Lỗi khác → nếu auth service down thì vẫn giữ token, có thể retry sau
           set({ loading: false });
         }
       },
@@ -97,7 +116,13 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "auth-storage",
-      partialize: (state) => ({ user: state.user }),
+      // Persist cả accessToken để sau reload vẫn còn trạng thái đăng nhập.
+      // Refresh token vẫn nằm trong HttpOnly cookie (backend tự gửi theo axios).
+      // accessToken chỉ dùng để gọi API, không chứa sensitive data.
+      partialize: (state) => ({
+        accessToken: state.accessToken,
+        user: state.user,
+      }),
     }
   )
 );

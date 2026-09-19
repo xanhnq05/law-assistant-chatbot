@@ -96,7 +96,7 @@ def ensure_chat_history(user_id: Any) -> Optional[Dict[str, Any]]:
 # ============================================================
 # CREATE
 # ============================================================
-def create_chat(user_id: Any, title: str = "Cuộc trò chuyện mới") -> Dict[str, Any]:
+def create_chat(user_id: Any, title: str = "Đoạn chat mới") -> Dict[str, Any]:
     """Tạo chat session mới (kèm upsert chat_history document)."""
     oid = _to_oid(user_id)
     if oid is None:
@@ -167,7 +167,9 @@ def update_chat(user_id: Any, session_id: str, title: str) -> Optional[Dict[str,
     if oid is None or not session_id or not title:
         return None
     now = datetime.now(timezone.utc)
-    result = chat_history_collection.find_one_and_update(
+    # MongoDB không cho dùng positional projection ($) + return_document='after'
+    # → phải tách 2 query: update rồi find_one.
+    chat_history_collection.update_one(
         {"user_id": oid, "chats.session_id": session_id},
         {
             "$set": {
@@ -176,13 +178,8 @@ def update_chat(user_id: Any, session_id: str, title: str) -> Optional[Dict[str,
                 "updated_at": now,
             }
         },
-        return_document=True,
-        projection={"chats.$": 1},
     )
-    if not result:
-        return None
-    chats = result.get("chats", [])
-    return chats[0] if chats else None
+    return get_chat(user_id=user_id, session_id=session_id)
 
 
 # ============================================================
@@ -227,20 +224,18 @@ def add_message(
         "created_at": datetime.now(timezone.utc),
     }
     now = datetime.now(timezone.utc)
-    result = chat_history_collection.find_one_and_update(
+    # MongoDB không cho dùng positional projection ($) + return_document='after'
+    # → update trước rồi fetch lại session để lấy message cuối.
+    chat_history_collection.update_one(
         {"user_id": oid, "chats.session_id": session_id},
         {
             "$push": {"chats.$.messages": message},
             "$inc": {"chats.$.metadata.message_count": 1},
             "$set": {"chats.$.updated_at": now, "updated_at": now},
         },
-        return_document=True,
-        projection={"chats.$": 1},
     )
-    if not result:
+    session = get_chat(user_id=user_id, session_id=session_id)
+    if not session:
         return None
-    chats = result.get("chats", [])
-    if not chats:
-        return None
-    messages = chats[0].get("messages", [])
+    messages = session.get("messages", [])
     return messages[-1] if messages else message

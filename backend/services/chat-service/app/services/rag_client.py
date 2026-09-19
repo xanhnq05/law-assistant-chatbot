@@ -5,8 +5,11 @@ POST sang rag-service mỗi khi cần trả lời. Nếu rag-service không kh�
 dụng, trả fallback để user không bị 500.
 
 Cung cấp cả 2 API:
-- ask(question, top_k)          : async, dùng cho async endpoint
-- ask_sync(question, top_k)     : sync, dùng cho def endpoint (router cũ)
+- ask(question, top_k, history)      : async
+- ask_sync(question, top_k, history) : sync
+
+history là list {role, content} của các message gần đây (tối đa 6 msg).
+rag-service sẽ dùng để duy trì multi-turn conversation.
 """
 from __future__ import annotations
 
@@ -27,9 +30,17 @@ class RagClient:
     # ------------------------------------------------------------
     # SYNC
     # ------------------------------------------------------------
-    def ask_sync(self, question: str, top_k: int = 5) -> Dict[str, Any]:
+    def ask_sync(
+        self,
+        question: str,
+        top_k: int = 5,
+        history: Optional[list[dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
         url = f"{self.base_url}/api/chat"
-        payload = {"question": question, "top_k": top_k}
+        payload: dict[str, Any] = {"question": question, "top_k": top_k}
+        if history:
+            # Giới hạn 3 cặp cuối (6 msg) — tránh hết context LLM
+            payload["history"] = history[-6:]
         try:
             with httpx.Client(timeout=self.timeout) as client:
                 resp = client.post(url, json=payload)
@@ -46,15 +57,27 @@ class RagClient:
         }
 
     # Alias để giữ tương thích tên hàm cũ.
-    def ask_sync_safe(self, question: str, top_k: int = 5) -> Dict[str, Any]:
-        return self.ask_sync(question, top_k)
+    def ask_sync_safe(
+        self,
+        question: str,
+        top_k: int = 5,
+        history: Optional[list[dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
+        return self.ask_sync(question, top_k=top_k, history=history)
 
     # ------------------------------------------------------------
     # ASYNC
     # ------------------------------------------------------------
-    async def ask(self, question: str, top_k: int = 5) -> Dict[str, Any]:
+    async def ask(
+        self,
+        question: str,
+        top_k: int = 5,
+        history: Optional[list[dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
         url = f"{self.base_url}/api/chat"
-        payload = {"question": question, "top_k": top_k}
+        payload: dict[str, Any] = {"question": question, "top_k": top_k}
+        if history:
+            payload["history"] = history[-6:]
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(url, json=payload)

@@ -15,13 +15,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { useChatStore, MAX_GUEST_MESSAGES, type Message } from "@/store/useChatStore";
 import { chatService, type ChatSessionResponse } from "@/services/chatService";
 import { authService } from "@/services/authService";
+import { ragAsk } from "@/services/ragService";
 import { toast } from "sonner";
 
 const SUGGESTIONS = [
-  "Thủ tục ly hôn đơn phương cần giấy tờ gì?",
-  "Mức phạt vượt đèn đỏ đối với xe máy năm nay?",
-  "Soạn giúp tôi mẫu hợp đồng thuê nhà cơ bản",
-  "Thời gian thử việc tối đa theo luật lao động là bao lâu?",
+  "Mức phạt khi vượt đèn đỏ đối với xe máy hiện nay?",
+  "Nồng độ cồn cho phép khi điều khiển ô tô là bao nhiêu?",
+  "Quy định về đội mũ bảo hiểm đối với người đi xe máy?",
+  "Thủ tục đăng ký biển số xe máy mới cần giấy tờ gì?",
 ];
 
 /** Tạo mã hồ sơ ngắn từ session_id để hiển thị UI */
@@ -62,9 +63,11 @@ export default function ChatPage() {
   const setActiveSession = useChatStore((s) => s.setActiveSession);
   const addMessageLocal = useChatStore((s) => s.addMessage);
   const setSending = useChatStore((s) => s.setSending);
-  const addGuestMessage = useChatStore((s) => s.addGuestMessage);
+  const addGuestUserMessage = useChatStore((s) => s.addGuestUserMessage);
+  const addGuestAssistantMessage = useChatStore((s) => s.addGuestAssistantMessage);
   const resetGuestChat = useChatStore((s) => s.resetGuestChat);
   const deleteSessionLocal = useChatStore((s) => s.deleteSession);
+  const clearAllSessions = useChatStore((s) => s.clearAllSessions);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
@@ -73,6 +76,7 @@ export default function ChatPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [input, setInput] = useState("");
   const [banner, setBanner] = useState<{ type: "error" | "info" | "warn"; text: string } | null>(null);
+  const [creatingSession, setCreatingSession] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -101,8 +105,23 @@ export default function ChatPage() {
           }))
         );
       } catch (err) {
+        // Service isolation: chat-service fail → vẫn cho guest chat
         console.error("Không tải được lịch sử chat:", err);
-        setBanner({ type: "error", text: "Không tải được lịch sử hồ sơ." });
+        // Nếu 401 → token chết, về guest
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 401 || status === 403) {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("user");
+          toast.error("Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.");
+          // Reload page để useAuth reset về guest
+          setTimeout(() => window.location.reload(), 800);
+          return;
+        }
+        // Lỗi khác (network, 500...) → cảnh báo nhẹ, vẫn dùng app được
+        setBanner({
+          type: "warn",
+          text: "Không tải được lịch sử đoạn chat. Bạn vẫn chat được ở chế độ khách.",
+        });
       }
     })();
     return () => {
@@ -129,9 +148,15 @@ export default function ChatPage() {
   };
 
   const handleSignOut = async () => {
+    // Cleanup session rỗng (nếu có) trên backend trước khi đăng xuất
+    const currentActiveId = useChatStore.getState().activeSessionId;
+    if (currentActiveId) {
+      await cleanupEmptySession(currentActiveId);
+    }
     try {
       await signOut();
-      resetGuestChat();
+      // Xóa sạch toàn bộ sessions (kể cả guest) + reset counter
+      clearAllSessions();
       setMenuOpen(false);
       toast.success("Đã đăng xuất");
     } catch {
@@ -141,9 +166,17 @@ export default function ChatPage() {
 
   const handleNewChat = async () => {
     if (!isAuthenticated) return;
+    // Debounce: nếu đang tạo thì bỏ qua click spam
+    if (creatingSession) return;
+    setCreatingSession(true);
     try {
+      // Cleanup session rỗng hiện tại (nếu có) trên backend
+      const currentActiveId = useChatStore.getState().activeSessionId;
+      if (currentActiveId) {
+        await cleanupEmptySession(currentActiveId);
+      }
       const newSession: ChatSessionResponse = await chatService.createSession(
-        "Cuộc trò chuyện mới"
+        "Đoạn chat mới"
       );
       addSession({
         id: newSession.id,
@@ -154,8 +187,37 @@ export default function ChatPage() {
       });
       setBanner(null);
     } catch (err) {
-      console.error(err);
-      setBanner({ type: "error", text: "Không tạo được hồ sơ mới." });
+      console.error("handleNewChat:", err);
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401 || status === 403) {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("user");
+        toast.error("Phiên đăng nhập hết hạn.");
+        setTimeout(() => window.location.reload(), 800);
+        return;
+      }
+      setBanner({ type: "error", text: "Không tạo được đoạn chat mới." });
+    } finally {
+      setCreatingSession(false);
+    }
+  };
+
+// Khi session đang active mà user không chat gì (vẫn "Đoạn chat mới" + 0 message)
+// thì xoá session rỗng đó trên backend khi chuyển sang session khác / tạo mới / đăng xuất.
+// Idempotent: gọi nhiều lần cũng OK, fail thì im lặng.
+const cleanupEmptySession = async (sessionId: string) => {
+    const state = useChatStore.getState();
+    const sess = state.sessions.find((s) => s.id === sessionId);
+    if (!sess) return;
+    const isEmpty =
+      sess.messages.length === 0 && sess.title === "Đoạn chat mới";
+    if (!isEmpty) return;
+    // Xóa local NGAY để UI không thấy session rỗng nữa
+    deleteSessionLocal(sessionId);
+    try {
+      await chatService.deleteSession(sessionId);
+    } catch {
+      /* ignore - cleanup best-effort */
     }
   };
 
@@ -167,7 +229,7 @@ export default function ChatPage() {
       deleteSessionLocal(id);
     } catch (err) {
       console.error(err);
-      setBanner({ type: "error", text: "Không xoá được hồ sơ." });
+      setBanner({ type: "error", text: "Không xoá được đoạn chat." });
     }
   };
 
@@ -187,8 +249,42 @@ export default function ChatPage() {
         );
         return;
       }
-      addGuestMessage(content);
+
+      // 1) Thêm user message vào store (persist localStorage)
+      addGuestUserMessage(content);
       setInput("");
+      setSending(true);
+
+      // 2) Lấy history gần đây (tối đa 3 cặp) để gửi cho RAG
+      const guestSession = useChatStore.getState().sessions.find((s) => s.id === "guest");
+      const recentMsgs = (guestSession?.messages ?? []).slice(-6); // max 6 msgs
+      const history = recentMsgs.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+
+      try {
+        // 3) Gọi rag-service thật (browser → Vite proxy → rag-service:8003)
+        const ragResult = await ragAsk(content, history, 5);
+        addGuestAssistantMessage(
+          ragResult.answer,
+          ragResult.sources.map((s) => ({
+            title: s.law_title || s.citation || "Nguồn",
+            snippet: s.context_block,
+            score: s.score,
+          }))
+        );
+      } catch (err) {
+        console.error("RAG error:", err);
+        addGuestAssistantMessage(
+          "Xin lỗi, hệ thống đang bận. Vui lòng thử lại sau."
+        );
+        toast.error("Không gửi được tin nhắn. Vui lòng thử lại.");
+      } finally {
+        setSending(false);
+      }
+
+      // 3) Check giới hạn sau khi gửi
       const remaining = useChatStore.getState().getGuestRemaining();
       if (remaining === 0) {
         setTimeout(() => {
@@ -206,7 +302,7 @@ export default function ChatPage() {
     if (!sessionId) {
       try {
         const newSession: ChatSessionResponse = await chatService.createSession(
-          "Cuộc trò chuyện mới"
+          "Đoạn chat mới"
         );
         addSession({
           id: newSession.id,
@@ -216,8 +312,17 @@ export default function ChatPage() {
           messages: [],
         });
         sessionId = newSession.id;
-      } catch {
-        setBanner({ type: "error", text: "Không tạo được phiên chat." });
+      } catch (err) {
+        console.error("Lỗi tạo session mới:", err);
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 401 || status === 403) {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("user");
+          toast.error("Phiên đăng nhập hết hạn.");
+          setTimeout(() => window.location.reload(), 800);
+          return;
+        }
+        setBanner({ type: "error", text: "Không tạo được phiên chat mới." });
         return;
       }
     }
@@ -233,7 +338,7 @@ export default function ChatPage() {
     setInput("");
     setSending(true);
 
-    try {
+        try {
       const updated = await chatService.sendMessage(sessionId, content);
       const messages = updated.messages.map((m) => ({
         id: m.id,
@@ -245,28 +350,47 @@ export default function ChatPage() {
       const currentSessions = useChatStore.getState().sessions;
       setSessions(
         currentSessions.map((s) =>
-          s.id === sessionId ? { ...s, messages, updatedAt: updated.updatedAt } : s
+          s.id === sessionId
+            ? { ...s, messages, updatedAt: updated.updatedAt }
+            : s
         )
       );
 
-      // Auto-rename session lần đầu tiên
+      // Auto-rename session lần đầu tiên: lấy 30 ký tự đầu của message user
+      // (Giống ChatGPT). Backend đã tự set title = content[:30] nếu session
+      // title = "Đoạn chat mới", nhưng ta cũng update local store để UI refresh ngay.
       const session = currentSessions.find((s) => s.id === sessionId);
-      if (session && session.title === "Cuộc trò chuyện mới") {
-        const newTitle = content.slice(0, 40);
+      if (session && session.title === "Đoạn chat mới") {
+        const newTitle = content.slice(0, 30).trim() || "Đoạn chat mới";
         try {
-          await chatService.updateTitle(sessionId, newTitle);
-          const refreshed = useChatStore.getState().sessions;
+          const refreshed = await chatService.updateTitle(sessionId, newTitle);
+          const after = useChatStore.getState().sessions;
           setSessions(
-            refreshed.map((s) =>
-              s.id === sessionId ? { ...s, title: newTitle, messages } : s
+            after.map((s) =>
+              s.id === sessionId ? { ...s, title: refreshed.title || newTitle, messages } : s
             )
           );
         } catch {
-          /* bỏ qua */
+          // Fallback: set title local trực tiếp nếu backend update fail
+          const after = useChatStore.getState().sessions;
+          setSessions(
+            after.map((s) =>
+              s.id === sessionId ? { ...s, title: newTitle, messages } : s
+            )
+          );
         }
       }
     } catch (err) {
-      console.error(err);
+      console.error("sendMessage error:", err);
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401 || status === 403) {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("user");
+        toast.error("Phiên đăng nhập hết hạn.");
+        setSending(false);
+        setTimeout(() => window.location.reload(), 800);
+        return;
+      }
       setBanner({ type: "error", text: "Gửi tin nhắn thất bại. Vui lòng thử lại." });
     } finally {
       setSending(false);
@@ -313,18 +437,24 @@ export default function ChatPage() {
           </div>
 
           <div className="new-chat-wrap">
-            <button className="new-chat-btn" type="button" onClick={handleNewChat}>
+            <button
+              className="new-chat-btn"
+              type="button"
+              onClick={handleNewChat}
+              disabled={creatingSession}
+              title={creatingSession ? "Đang xử lý..." : "Bắt đầu đoạn chat mới"}
+            >
               <Plus width={16} height={16} />
-              <span>Hồ sơ mới</span>
+              <span>{creatingSession ? "Đang tạo..." : "Đoạn chat mới"}</span>
             </button>
           </div>
 
           <div className="chat-list" id="chatList">
-            <div className="chat-list-label">Hồ sơ tư vấn</div>
+            <div className="chat-list-label">Đoạn chat tư vấn</div>
             <div id="chatListItems">
               {sessions.length === 0 ? (
                 <div className="chat-empty">
-                  Chưa có hồ sơ nào. Bấm "Hồ sơ mới" để bắt đầu.
+                  Chưa có đoạn chat nào. Bấm "Đoạn chat mới" để bắt đầu.
                 </div>
               ) : (
                 sessions.map((c) => {
@@ -343,14 +473,14 @@ export default function ChatPage() {
                           {makeCodeFromId(c.id)}
                         </span>
                         <span className="title">
-                          {c.title || "Cuộc trò chuyện"}
+                          {c.title || "Đoạn chat mới"}
                         </span>
                       </button>
                       <button
                         className="chat-delete-btn"
                         type="button"
                         onClick={(e) => handleDeleteChat(c.id, e)}
-                        title="Xóa hồ sơ"
+                        title="Xóa đoạn chat"
                       >
                         <Trash2 width={13} height={13} />
                       </button>
@@ -418,7 +548,7 @@ export default function ChatPage() {
           </button>
           <div className="topbar-text">
             <div className="topbar-title">
-              {activeSession?.title || "Cuộc trò chuyện mới"}
+              {activeSession?.title || "Đoạn chat mới"}
             </div>
             <div className="topbar-code">
               {activeSession ? makeCodeFromId(activeSession.id) : ""}
@@ -478,8 +608,8 @@ export default function ChatPage() {
               <h2>Xin chào, {firstName}</h2>
               <p>
                 {isAuthenticated
-                  ? "Đặt câu hỏi pháp lý, hoặc chọn một gợi ý bên dưới để bắt đầu."
-                  : `Đặt câu hỏi pháp lý để dùng thử. Bạn còn ${guestRemaining}/${MAX_GUEST_MESSAGES} lượt miễn phí.`}
+                  ? "Đặt câu hỏi về luật giao thông đường bộ, hoặc chọn một gợi ý bên dưới để bắt đầu."
+                  : `Đặt câu hỏi về luật giao thông đường bộ để dùng thử. Bạn còn ${guestRemaining}/${MAX_GUEST_MESSAGES} lượt miễn phí.`}
               </p>
               <div className="suggestions-grid">
                 {SUGGESTIONS.map((s, i) => (
@@ -531,7 +661,7 @@ export default function ChatPage() {
                 placeholder={
                   !isAuthenticated && !canSendGuest
                     ? "Vui lòng đăng nhập để tiếp tục…"
-                    : "Đặt câu hỏi pháp lý của bạn…"
+                    : "Đặt câu hỏi về luật giao thông đường bộ…"
                 }
                 disabled={inputDisabled}
                 onInput={(e) => {

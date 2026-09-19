@@ -47,6 +47,7 @@ async def chat(req: ChatRequest):
             question=req.question,
             top_k=req.top_k,
             verify=req.verify,
+            history=req.history or None,
         )
         return response
     except Exception as exc:

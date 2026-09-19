@@ -26,6 +26,13 @@ from app.repositories.chat_repository import (
 )
 from app.services.rag_client import RagClient, get_rag_client
 
+# ── Context limiting ──────────────────────────────────────────────────────
+# Giới hạn history gửi cho RAG:
+#   - Tối đa MAX_HISTORY_PAIRS cặp user/assistant = MAX_HISTORY_MSGS messages
+#   - Chỉ gửi 3 cặp cuối (6 msg) để tránh hết context window LLM
+MAX_HISTORY_PAIRS = 3
+MAX_HISTORY_MSGS = MAX_HISTORY_PAIRS * 2
+
 
 _rag_client: Optional[RagClient] = None
 
@@ -40,7 +47,11 @@ def _rag() -> RagClient:
 # ============================================================
 # CRUD
 # ============================================================
-def create_new_chat(user_id: Any, title: str = "Cuộc trò chuyện mới") -> Dict[str, Any]:
+DEFAULT_CHAT_TITLE = "Đoạn chat mới"
+AUTO_RENAME_MAX_CHARS = 30
+
+
+def create_new_chat(user_id: Any, title: str = DEFAULT_CHAT_TITLE) -> Dict[str, Any]:
     try:
         return create_chat(user_id=user_id, title=title)
     except ValueError as exc:
@@ -117,7 +128,11 @@ def add_chat_message(
     generate_answer: bool = True,
     top_k: int = 5,
 ) -> Dict[str, Any]:
-    """Push message mới + (nếu role=user) gọi RAG để push câu trả lời assistant."""
+    """Push message mới + (nếu role=user) gọi RAG để push câu trả lời assistant.
+
+    RAG được truyền thêm history gần đây (tối đa MAX_HISTORY_PAIRS cặp)
+    để duy trì multi-turn conversation mà không hết context window.
+    """
     if not session_id or not role or not content:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -141,9 +156,28 @@ def add_chat_message(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid message payload"
         )
 
+    # Auto-rename session lần đầu (giống ChatGPT): nếu session vẫn mang
+    # title mặc định thì lấy 30 ký tự đầu của message user làm title.
+    if role == "user":
+        try:
+            current = get_chat(user_id=user_id, session_id=session_id)
+            if current and current.get("title") == DEFAULT_CHAT_TITLE:
+                new_title = content.strip()[:AUTO_RENAME_MAX_CHARS]
+                if new_title:
+                    update_chat(user_id=user_id, session_id=session_id, title=new_title)
+                    log.info("Auto-renamed session %s → %r", session_id[:8], new_title)
+        except Exception as exc:
+            log.warning("Auto-rename session thất bại: %s", exc)
+
     if role == "user" and generate_answer:
-        # Gọi rag-service bằng HTTP. Nếu fail, rag_client đã trả fallback.
-        rag_result = _rag().ask_sync_safe(content, top_k=top_k)
+        # Lấy session hiện tại để trích history gần đây cho RAG
+        session = get_chat(user_id=user_id, session_id=session_id)
+        history = _extract_history_for_rag(session)
+
+        # Gọi rag-service bằng HTTP, truyền thêm history
+        rag_result = _rag().ask_sync_safe(
+            content, top_k=top_k, history=history
+        )
         assistant = repo_add_message(
             user_id=user_id,
             session_id=session_id,
@@ -161,3 +195,17 @@ def add_chat_message(
             detail="Không lấy lại được session sau khi thêm message",
         )
     return full_session
+
+
+def _extract_history_for_rag(session: Optional[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """Trích lịch sử hội thoại gần đây (tối đa MAX_HISTORY_MSGS msg) cho RAG."""
+    if not session:
+        return []
+    messages = session.get("messages", [])
+    # Lấy tối đa MAX_HISTORY_MSGS tin nhắn cuối cùng (đã bao gồm msg vừa thêm)
+    recent = messages[-MAX_HISTORY_MSGS:] if len(messages) > MAX_HISTORY_MSGS else messages
+    return [
+        {"role": m.get("role", "user"), "content": m.get("content", "")}
+        for m in recent
+        if m.get("role") in ("user", "assistant") and m.get("content")
+    ]
