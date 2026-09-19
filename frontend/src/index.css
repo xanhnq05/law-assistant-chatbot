@@ -1,45 +1,88 @@
-:root {
-  --bg-deep: #0a2036;
-  --panel: #102e50;
-  --panel-raised: #183a61;
-  --border: rgba(245, 196, 94, 0.14);
-  --border-strong: rgba(245, 196, 94, 0.28);
-  --text-primary: #f1ecdd;
-  --text-muted: #8fa3bc;
-  --gold: #f5c45e;
-  --orange: #e78b48;
-  --red: #be3d2a;
-  --green: #4caf50;
-  --font-display: "Noto Serif", serif;
-  --font-body: "Be Vietnam Pro", sans-serif;
-  --font-mono: "IBM Plex Mono", monospace;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Theme Trợ Lý Pháp Luật - dark navy + vàng đồng cổ điển */
+    --bg-deep: #0a2036;
+    --panel: #102e50;
+    --panel-raised: #183a61;
+    --border: rgba(245, 196, 94, 0.14);
+    --border-strong: rgba(245, 196, 94, 0.28);
+    --text-primary: #f1ecdd;
+    --text-muted: #8fa3bc;
+    --gold: #f5c45e;
+    --orange: #e78b48;
+    --red: #be3d2a;
+    --green: #4caf50;
+    --font-display: "Noto Serif", serif;
+    --font-body: "Be Vietnam Pro", sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+
+    /* Tailwind shim variables (giữ tương thích với components ui/*) */
+    --background: 210 65% 12%;
+    --foreground: 40 35% 92%;
+    --card: 210 58% 19%;
+    --card-foreground: 40 35% 92%;
+    --primary: 41 87% 62%;
+    --primary-foreground: 0 0% 10%;
+    --secondary: 210 49% 27%;
+    --secondary-foreground: 40 35% 92%;
+    --muted: 210 49% 27%;
+    --muted-foreground: 213 25% 62%;
+    --accent: 210 49% 27%;
+    --accent-foreground: 40 35% 92%;
+    --destructive: 12 60% 46%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 41 75% 65%;
+    --input: 210 49% 27%;
+    --ring: 41 87% 62%;
+    --radius: 0.5rem;
+  }
 }
 
-* { box-sizing: border-box; }
-
-html, body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  font-family: var(--font-body);
-  background: var(--bg-deep);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  * {
+    @apply border-border/20;
+  }
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+  button,
+  textarea,
+  input {
+    font-family: inherit;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
 }
 
-button, textarea, input { font-family: inherit; }
-
-#app { height: 100vh; width: 100%; }
-
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(245, 196, 94, 0.2); border-radius: 999px; }
-::-webkit-scrollbar-track { background: transparent; }
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(245, 196, 94, 0.2);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 
 /* ============================================================
    LOGIN SCREEN
    ============================================================ */
-
 .login-screen {
   height: 100%;
   display: flex;
@@ -86,6 +129,7 @@ button, textarea, input { font-family: inherit; }
   font-weight: 600;
   margin: 0;
   letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 
 .login-brand p {
@@ -121,25 +165,6 @@ button, textarea, input { font-family: inherit; }
   text-align: center;
 }
 
-.setup-notice {
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--text-muted);
-  background: rgba(190, 61, 42, 0.1);
-  border: 1px solid rgba(190, 61, 42, 0.35);
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin-top: 14px;
-}
-.setup-notice strong { color: var(--red); display: block; margin-bottom: 4px; }
-.setup-notice code {
-  background: rgba(255, 255, 255, 0.06);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-}
-
 .login-disclaimer {
   display: flex;
   gap: 8px;
@@ -152,10 +177,12 @@ button, textarea, input { font-family: inherit; }
 .login-disclaimer svg { color: var(--red); flex-shrink: 0; margin-top: 2px; width: 14px; height: 14px; }
 
 /* ============================================================
-   APP LAYOUT
+   APP SHELL
    ============================================================ */
-
-.app-shell { height: 100%; display: flex; }
+.app-shell {
+  height: 100%;
+  display: flex;
+}
 
 .sidebar {
   width: 288px;
@@ -177,9 +204,14 @@ button, textarea, input { font-family: inherit; }
   border-bottom: 1px solid var(--border);
 }
 .sidebar-header .icon-ring-sm {
-  width: 32px; height: 32px; border-radius: 999px;
-  border: 1px solid var(--gold); color: var(--gold);
-  display: flex; align-items: center; justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .sidebar-header .brand-name {
   font-family: var(--font-display);
@@ -195,10 +227,17 @@ button, textarea, input { font-family: inherit; }
 .new-chat-wrap { padding: 12px; }
 .new-chat-btn {
   width: 100%;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  border: none; border-radius: 8px; padding: 9px;
-  font-size: 14px; font-weight: 600;
-  background: var(--gold); color: #1a1a18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: 8px;
+  padding: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--gold);
+  color: #1a1a18;
   cursor: pointer;
   transition: opacity 0.15s;
 }
@@ -259,13 +298,16 @@ button, textarea, input { font-family: inherit; }
 
 .chat-delete-btn {
   flex-shrink: 0;
-  width: 26px; height: 26px;
+  width: 26px;
+  height: 26px;
   margin-right: 6px;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--text-muted);
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s, color 0.15s, background 0.15s;
@@ -299,10 +341,17 @@ button, textarea, input { font-family: inherit; }
 }
 .user-row:hover { background: rgba(255, 255, 255, 0.05); }
 .user-avatar {
-  width: 32px; height: 32px; border-radius: 999px;
-  background: var(--red); color: var(--text-primary);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 600; flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--red);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
   object-fit: cover;
   overflow: hidden;
 }
@@ -312,18 +361,24 @@ button, textarea, input { font-family: inherit; }
 
 .user-menu {
   position: absolute;
-  left: 12px; right: 12px; bottom: 64px;
+  left: 12px;
+  right: 12px;
+  bottom: 64px;
   background: var(--panel-raised);
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 30;
 }
 .logout-btn {
   width: 100%;
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 12px;
-  background: none; border: none;
+  background: none;
+  border: none;
   color: var(--red);
   font-size: 14px;
   cursor: pointer;
@@ -334,8 +389,12 @@ button, textarea, input { font-family: inherit; }
 /* ============================================================
    MAIN PANEL
    ============================================================ */
-
-.main-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.main-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
 
 .topbar {
   height: 56px;
@@ -347,9 +406,15 @@ button, textarea, input { font-family: inherit; }
   border-bottom: 1px solid var(--border);
 }
 .icon-btn {
-  background: none; border: none; color: var(--text-primary);
-  cursor: pointer; padding: 6px; border-radius: 6px;
-  display: inline-flex; align-items: center; justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .icon-btn:hover { background: rgba(255, 255, 255, 0.06); }
 .menu-toggle { display: none; }
@@ -375,9 +440,14 @@ button, textarea, input { font-family: inherit; }
   margin: 0 auto;
 }
 .empty-state .icon-ring {
-  width: 56px; height: 56px; border-radius: 999px;
-  border: 2px solid var(--gold); color: var(--orange);
-  display: flex; align-items: center; justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  border: 2px solid var(--gold);
+  color: var(--orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 16px;
 }
 .empty-state h2 {
@@ -385,8 +455,13 @@ button, textarea, input { font-family: inherit; }
   font-size: 22px;
   font-weight: 600;
   margin: 0 0 6px;
+  color: var(--text-primary);
 }
-.empty-state p { font-size: 14px; color: var(--text-muted); margin: 0 0 24px; }
+.empty-state p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0 0 24px;
+}
 
 .suggestions-grid {
   display: grid;
@@ -425,9 +500,14 @@ button, textarea, input { font-family: inherit; }
 .message-row.assistant { justify-content: flex-start; }
 
 .stamp-avatar {
-  width: 32px; height: 32px; border-radius: 999px;
-  border: 2px solid var(--orange); color: var(--orange);
-  display: flex; align-items: center; justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 2px solid var(--orange);
+  color: var(--orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
@@ -479,9 +559,16 @@ button, textarea, input { font-family: inherit; }
   font-weight: 600;
   color: var(--gold);
   list-style: none;
-  display: flex; align-items: center; gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.sources-card summary::before { content: "▸"; transition: transform 0.15s; }
+.sources-card summary::before {
+  content: "▸";
+  transition: transform 0.15s;
+  display: inline-block;
+  margin-right: 4px;
+}
 .sources-card[open] summary::before { transform: rotate(90deg); }
 .sources-card ul { margin: 8px 0 0; padding-left: 18px; }
 .sources-card li { margin: 4px 0; line-height: 1.5; }
@@ -503,13 +590,15 @@ button, textarea, input { font-family: inherit; }
   width: fit-content;
 }
 .typing-dot {
-  width: 6px; height: 6px; border-radius: 999px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
   background: var(--orange);
-  animation: bounce 1s infinite;
+  animation: bubble-bounce 1s infinite;
 }
 .typing-dot:nth-child(2) { animation-delay: 0.15s; }
 .typing-dot:nth-child(3) { animation-delay: 0.3s; }
-@keyframes bounce {
+@keyframes bubble-bounce {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
   30% { transform: translateY(-4px); opacity: 1; }
 }
@@ -517,7 +606,6 @@ button, textarea, input { font-family: inherit; }
 /* ============================================================
    COMPOSER
    ============================================================ */
-
 .composer {
   border-top: 1px solid var(--border);
   padding: 12px 40px;
@@ -545,14 +633,21 @@ button, textarea, input { font-family: inherit; }
   font-size: 14px;
   max-height: 160px;
   line-height: 1.5;
+  font-family: inherit;
 }
 .composer-box textarea::placeholder { color: var(--text-muted); }
+.composer-box textarea:disabled { cursor: not-allowed; }
+
 .send-btn {
-  width: 32px; height: 32px; border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
   border: none;
   background: var(--red);
   color: var(--text-primary);
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
   transition: opacity 0.15s;
@@ -567,15 +662,16 @@ button, textarea, input { font-family: inherit; }
 }
 
 /* ============================================================
-   BANNER / ERROR
+   BANNER / GUEST NOTICE
    ============================================================ */
-
 .banner {
   margin: 12px 40px 0;
   padding: 10px 14px;
   border-radius: 8px;
   font-size: 13px;
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .banner.error {
   background: rgba(190, 61, 42, 0.12);
@@ -587,11 +683,17 @@ button, textarea, input { font-family: inherit; }
   border: 1px solid rgba(245, 196, 94, 0.4);
   color: var(--gold);
 }
+.banner.warn {
+  background: rgba(231, 139, 72, 0.08);
+  border: 1px solid rgba(231, 139, 72, 0.4);
+  color: var(--orange);
+}
+
+.banner .ml-auto { margin-left: auto; }
 
 /* ============================================================
    RESPONSIVE
    ============================================================ */
-
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
@@ -602,6 +704,7 @@ button, textarea, input { font-family: inherit; }
   .sidebar.closed { display: none; }
   .sidebar-header .close-btn { display: inline-flex; }
   .menu-toggle { display: inline-flex; }
-  .messages-area, .composer { padding-left: 16px; padding-right: 16px; }
+  .messages-area,
+  .composer { padding-left: 16px; padding-right: 16px; }
   .banner { margin-left: 16px; margin-right: 16px; }
 }

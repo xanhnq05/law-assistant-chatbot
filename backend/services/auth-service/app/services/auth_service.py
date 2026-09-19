@@ -6,15 +6,20 @@ Quy trình xử lý Google login (tách bạch với HTTP & DB):
         2. Tìm user trong MongoDB theo google_id
         3. Nếu chưa có: tạo user + tạo chat_history rỗng
         4. Nếu có rồi: cập nhật last_login
-        5. Tạo JWT
-        6. Trả về LoginResponse
+        5. Tạo JWT (access token)
+        6. Tạo session + refresh token (lưu hash vào collection `sessions`)
+        7. Trả về LoginResponse
+
+Ngoài ra:
+    refresh_access_token(refresh_token) : đổi refresh token lấy access token mới
+    logout_session(refresh_token)       : thu hồi session (đăng xuất)
 
 Không truy cập trực tiếp MongoDB / Google OAuth / JWT — tất cả qua
 repositories layer.
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi import HTTPException, Request, status
 
@@ -28,6 +33,26 @@ from app.repositories.user_repository import (
     update_last_login,
 )
 from app.repositories.chat_history_repository import create_initial_chat_history
+from app.repositories.session_repository import (
+    create_session,
+    revoke_session,
+    rotate_session,
+)
+
+
+def _client_meta(request: Request) -> Tuple[Optional[str], Optional[str]]:
+    """Lấy (user_agent, ip) của client để ghi vào session (chỉ mang tính thông tin).
+
+    Sau nginx, request.client.host là IP của container nginx nên ưu tiên
+    X-Forwarded-For (nginx.conf đã set header này).
+    """
+    user_agent = request.headers.get("user-agent")
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        ip_address = forwarded.split(",")[0].strip() or None
+    else:
+        ip_address = request.client.host if request.client else None
+    return user_agent, ip_address
 
 
 async def handle_google_login(request: Request) -> Dict[str, Any]:
@@ -83,7 +108,16 @@ async def handle_google_login(request: Request) -> Dict[str, Any]:
         # 4. JWT
         access_token = create_access_token(user_id=str(user_id), role=role)
 
-        # 5. Safe response
+        # 5. Refresh token — nếu lỗi thì vẫn cho đăng nhập (chỉ mất tính năng
+        #    tự đăng nhập lại ở lần sau), giống cách xử lý chat_history ở trên.
+        refresh_token: Optional[str] = None
+        try:
+            user_agent, ip_address = _client_meta(request)
+            refresh_token, _ = create_session(str(user_id), user_agent, ip_address)
+        except Exception as exc:
+            log.warning("Không tạo được session / refresh token: %s", exc)
+
+        # 6. Safe response
         return {
             "user": {
                 "id": str(user_id),
@@ -95,6 +129,7 @@ async def handle_google_login(request: Request) -> Dict[str, Any]:
                 "role": role,
             },
             "access_token": access_token,
+            "refresh_token": refresh_token,
             "token_type": "bearer",
             "is_new_user": is_new_user,
         }
@@ -154,3 +189,42 @@ async def get_current_user(request: Request) -> str:
         )
 
     return user_id
+
+
+def refresh_access_token(refresh_token: str) -> Dict[str, Any]:
+    """Đổi refresh token lấy access token mới + refresh token mới (rotation).
+
+    Raises:
+        HTTPException 401 nếu refresh token không hợp lệ / đã thu hồi / hết hạn
+        hoặc user tương ứng không còn tồn tại.
+    """
+    rotated = rotate_session(refresh_token)
+    if rotated is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+    new_refresh_token, session = rotated
+
+    user = load_user(session["user_id"])
+    if user is None:
+        # User đã bị xoá: thu hồi luôn session để không dùng lại được.
+        revoke_session(new_refresh_token)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    access_token = create_access_token(
+        user_id=str(user["_id"]), role=user.get("role", "user")
+    )
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer",
+    }
+
+
+def logout_session(refresh_token: str) -> bool:
+    """Thu hồi session ứng với refresh token. True nếu có session bị thu hồi."""
+    return revoke_session(refresh_token)

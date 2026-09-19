@@ -3,13 +3,15 @@
 Run:
     cd backend/services/auth-service
     set PYTHONPATH=. (hoặc $env:PYTHONPATH="."  trên PowerShell)
-    uvicorn app.main:app --reload --port 8001
+    python -m uvicorn app.main:app --reload --port 8001
 
 Endpoints:
 - GET  /                            : health check
 - GET  /auth/google/login           : bắt đầu Google OAuth flow
 - GET  /auth/google/callback        : Google OAuth callback
 - GET  /auth/me                     : thông tin user hiện tại (cần Bearer JWT)
+- POST /auth/refresh                : đổi refresh token lấy access token mới
+- POST /auth/logout                 : thu hồi refresh token + xoá cookie
 """
 from __future__ import annotations
 
@@ -28,6 +30,7 @@ from app.core.config import (
 )
 from app.db import get_mongo_client
 from app.repositories.google_oauth import register_google_oauth
+from app.repositories.session_repository import ensure_indexes
 
 
 app = FastAPI(title=SERVICE_NAME, version="1.0.0")
@@ -81,6 +84,11 @@ async def _startup() -> None:
         get_mongo_client().connect()
     except Exception as exc:
         log.error("MongoDB warm-up thất bại: %s", exc)
+    # Tạo index cho collection `sessions` (unique hash + TTL hết hạn). Idempotent.
+    try:
+        ensure_indexes()
+    except Exception as exc:
+        log.error("Tạo index cho collection sessions thất bại: %s", exc)
 
 
 @app.on_event("shutdown")

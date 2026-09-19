@@ -1,6 +1,12 @@
 """auth-service schemas package."""
 from __future__ import annotations
 
+from .session import (
+    RefreshTokenRequest,
+    RefreshTokenResponse,
+    Session,
+    SessionPublic,
+)
 from .user import (
     GoogleUserInfo,
     LoginResponse,
@@ -13,4 +19,8 @@ __all__ = [
     "UserPublic",
     "LoginResponse",
     "GoogleUserInfo",
+    "Session",
+    "SessionPublic",
+    "RefreshTokenRequest",
+    "RefreshTokenResponse",
 ]

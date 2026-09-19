@@ -65,6 +65,19 @@ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 
+# Refresh token: lưu HASH trong collection `sessions`, gửi cho browser qua
+# cookie HttpOnly (JavaScript không đọc được -> khó bị đánh cắp qua XSS).
+JWT_REFRESH_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_EXPIRE_DAYS", "30"))
+REFRESH_COOKIE_NAME = os.getenv("REFRESH_COOKIE_NAME", "tlpl_refresh")
+# Chỉ gửi cookie tới /auth/* (refresh, logout), không gửi kèm /chats/*.
+REFRESH_COOKIE_PATH = "/auth"
+# Production (HTTPS): đặt REFRESH_COOKIE_SECURE=true.
+# Nếu frontend và API khác *site*: REFRESH_COOKIE_SAMESITE=none (bắt buộc kèm Secure).
+REFRESH_COOKIE_SECURE = os.getenv("REFRESH_COOKIE_SECURE", "false").strip().lower() in (
+    "1", "true", "yes",
+)
+REFRESH_COOKIE_SAMESITE = os.getenv("REFRESH_COOKIE_SAMESITE", "lax").strip().lower()
+
 
 # ============================================================
 # SERVICE

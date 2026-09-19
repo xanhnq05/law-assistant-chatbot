@@ -3,7 +3,7 @@
 Run:
     cd backend/services/chat-service
     $env:PYTHONPATH="."        # PowerShell
-    uvicorn app.main:app --reload --port 8002
+    python -m uvicorn app.main:app --reload --port 8002
 
 Phụ thuộc runtime:
 - MongoDB (cùng cluster với auth-service)
