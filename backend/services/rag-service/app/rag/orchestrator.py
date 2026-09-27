@@ -161,7 +161,7 @@ def run_pipeline(
     )
 
     # ============================================================
-    # B6 - LLM GENERATION
+    # B6 - LLM GENERATION (nhận legal_context để smart truncation)
     # ============================================================
     log.info("[B6] Generating answer via Groq (history=%d msgs) ...", len(history or []))
     state.answer = step_generate_answer(
@@ -169,6 +169,7 @@ def run_pipeline(
         question,
         state.context_text,
         history=history,
+        legal_context=state.legal_context,  # B5 LegalContext → smart truncation
     )
 
     # ============================================================
