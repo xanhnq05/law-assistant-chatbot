@@ -68,7 +68,6 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_MODEL_FAST = os.getenv("GROQ_MODEL_FAST", "openai/gpt-oss-20b")
 GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0"))
 
-
 # ============================================================
 # EMBEDDING (B3)
 # ============================================================

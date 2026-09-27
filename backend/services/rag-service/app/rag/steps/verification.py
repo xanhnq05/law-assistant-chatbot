@@ -18,6 +18,13 @@ Chiến lược hybrid (rule-based + LLM-as-Judge):
   - Cuối cùng: combine 2 score → status (PASS / WARN / FAIL)
 
 Đây chính là bước 7 trong kiến trúc image 2 (Hybrid RAG system).
+
+B5 LegalContext integration:
+  - Khi nhận LegalContext, B7 sẽ verify bằng citation ↔ evidence mapping
+    (claim → citation → evidence → legal source) thay vì chỉ match article_number
+    trong context_blocks.
+  - Hàm cũ step_verify_answer(verifier_llm, question, answer, context_blocks)
+    vẫn hoạt động bình thường nếu chưa migrate sang LegalContext.
 """
 from __future__ import annotations
 
@@ -28,6 +35,7 @@ from typing import Any
 from app.core.config import VERIFICATION_PASS_THRESHOLD, VERIFIER_LLM_ENABLED, log
 from app.core.models import VerificationResult, VerificationStatus
 from app.rag.prompts.verifier import SYSTEM_VERIFIER
+from app.rag.schemas.legal_context import LegalContext
 
 
 # ============================================================
@@ -231,23 +239,36 @@ def step_verify_answer(
     verifier_llm,
     question: str,
     answer: str,
-    context_blocks: list[dict[str, Any]],
+    context_blocks: list[dict[str, Any]] | None = None,
     *,
+    legal_context: LegalContext | None = None,
     use_llm_judge: bool | None = None,
 ) -> VerificationResult:
     """
     B7: Symbolic Verification (hybrid rule + LLM-as-Judge).
 
     Args:
-        verifier_llm:  LLM để chấm (engine.get_verifier_llm()).
-        question:      câu hỏi user.
-        answer:        câu trả lời từ B6.
+        verifier_llm:   LLM để chấm (engine.get_verifier_llm()).
+        question:       câu hỏi user.
+        answer:         câu trả lời từ B6.
         context_blocks: list các dict từ B4 (có citation + context_block).
-        use_llm_judge: nếu None → lấy từ config VERIFIER_LLM_ENABLED.
+                        DEPRECATED: dùng `legal_context` nếu có.
+        legal_context:  B5 LegalContext (ưu tiên hơn context_blocks nếu được truyền).
+                        Cho phép B7 verify claim ↔ citation ↔ evidence ↔ source
+                        với traceability chặt hơn.
+        use_llm_judge:  nếu None → lấy từ config VERIFIER_LLM_ENABLED.
 
     Returns:
         VerificationResult (Pydantic).
     """
+    # Chuẩn hoá input: ưu tiên legal_context nếu có
+    if legal_context is not None:
+        # Chuyển LegalContext.evidence → list[dict] tương thích với
+        # logic cũ (rule-based) bằng cách dùng evidence[i].metadata (raw B4 block)
+        # + thêm field article_number/clause_number ở top-level cho back-compat.
+        context_blocks = [_evidence_to_block(e) for e in legal_context.evidence]
+    elif context_blocks is None:
+        context_blocks = []
     # 1) Rule-based (luôn chạy)
     rule = _rule_based_score(answer, context_blocks)
     rule_score = rule["score"]
@@ -294,3 +315,27 @@ def step_verify_answer(
         llm_judge_used=llm_used,
         llm_judge_reason=llm_reason,
     )
+
+
+# ============================================================
+# B5 INTEGRATION: EvidenceItem → context_block dict (back-compat)
+# ============================================================
+def _evidence_to_block(ev) -> dict[str, Any]:
+    """Convert B5 EvidenceItem → dict shape tương thích với rule-based code cũ.
+
+    EvidenceItem đã có field `metadata` chứa nguyên B4 raw block — ta merge
+    thêm các field ở top-level (article_number, clause_number, citation) để
+    rule-based code cũ (_rule_based_score, _context_has_citation) chạy được
+    mà không cần refactor.
+    """
+    block = dict(ev.metadata or {})
+    sid = ev.stable_id
+    if sid.article_id and not block.get("article_id"):
+        block["article_id"] = sid.article_id
+    if sid.clause_id and not block.get("clause_id"):
+        block["clause_id"] = sid.clause_id
+    if sid.document_id and not block.get("law_document_id"):
+        block["law_document_id"] = sid.document_id
+    # evidence_id để B7 có thể report lại cho user
+    block["evidence_id"] = ev.evidence_id
+    return block

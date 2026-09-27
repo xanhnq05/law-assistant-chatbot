@@ -7,13 +7,15 @@ Theo image 1 & 2:
   B7 Symbolic Verification → Response
 
 State machine:
-  state.question          (str)        : câu hỏi gốc
-  state.cleaned           (dict)       : output của B2
-  state.query_vector      (list[float]): output của B3
-  state.retrieved_blocks  (list[dict]) : output của B4
-  state.context_text      (str)        : output của B5
-  state.answer            (str)        : output của B6
-  state.verification      (VerifyResult): output của B7
+  state.question          (str)            : câu hỏi gốc
+  state.cleaned           (dict)           : output của B2
+  state.query_vector      (list[float])    : output của B3
+  state.retrieved_blocks  (list[dict])     : output của B4 (raw)
+  state.legal_context     (LegalContext)   : output của B5 (B5 official contract)
+  state.context_text      (str)            : alias của legal_context.formatted_context
+                                             (giữ cho back-compat với B6 cũ)
+  state.answer            (str)            : output của B6
+  state.verification      (VerifyResult)   : output của B7
 """
 from __future__ import annotations
 
@@ -23,15 +25,25 @@ from typing import Any
 from app.core.config import RERANKER_ENABLED, log
 from app.core.models import ChatResponse, SourceItem, VerificationResult
 from app.rag.engine import RagEngine
+from app.rag.schemas.legal_context import LegalContext
 from app.rag.steps.cleaner import step_clean_query
 from app.rag.steps.context_builder import (
     build_context_for_llm,
+    build_legal_context,
     build_sources_for_response,
 )
 from app.rag.steps.embedding import step_embed_cleaned_query
 from app.rag.steps.generator import step_generate_answer
 from app.rag.steps.retrieval import step_retrieve_hybrid
 from app.rag.steps.verification import step_verify_answer
+
+
+# ============================================================
+# CONFIG
+# ============================================================
+# Cap evidence B5 đưa vào LegalContext (để B6 prompt không bị tràn).
+# B6 vẫn còn MAX_CONTEXT_CHARS=6000 như một lớp an toàn thứ 2.
+B5_MAX_EVIDENCE = 10
 
 
 @dataclass
@@ -42,7 +54,8 @@ class PipelineState:
     cleaned: dict[str, Any] = field(default_factory=dict)
     query_vector: list[float] = field(default_factory=list)
     retrieved_blocks: list[dict[str, Any]] = field(default_factory=list)
-    context_text: str = ""
+    legal_context: LegalContext | None = None  # B5 official contract
+    context_text: str = ""  # alias legal_context.formatted_context (back-compat B6)
     answer: str = ""
     verification: VerificationResult | None = None
     sources: list[dict[str, Any]] = field(default_factory=list)
@@ -110,11 +123,42 @@ def run_pipeline(
     )
 
     # ============================================================
-    # B5 - CONTEXT BUILDER
+    # B5 - CONTEXT BUILDER (LegalContext — official B5 contract)
     # ============================================================
-    log.info("[B5] Building context from %d blocks ...", len(state.retrieved_blocks))
-    state.context_text = build_context_for_llm(state.retrieved_blocks)
+    log.info(
+        "[B5] Building LegalContext from %d blocks (max_evidence=%d) ...",
+        len(state.retrieved_blocks),
+        B5_MAX_EVIDENCE,
+    )
+    # retrieval_query ưu tiên từ B3 enriched (cleaned + key_terms).
+    # B3 đã có hàm step_embed_cleaned_query trả vector, nhưng text enriched
+    # ta reconstruct lại ở đây để LegalContext.request.retrieval_query là
+    # chính xác text đã embed.
+    rq_parts = [state.cleaned.get("cleaned_query") or state.question]
+    terms = state.cleaned.get("key_legal_terms") or []
+    if terms:
+        rq_parts.append("Thuật ngữ: " + " ".join(terms[:5]))
+    retrieval_query = "\n".join(rq_parts)
+
+    state.legal_context = build_legal_context(
+        question=state.question,
+        cleaned=state.cleaned,
+        retrieved_blocks=state.retrieved_blocks,
+        retrieval_query=retrieval_query,
+        max_evidence=B5_MAX_EVIDENCE,
+    )
+    # Back-compat: B6 cũ đọc context_text (string). alias từ formatted_context.
+    state.context_text = state.legal_context.formatted_context
+    # Back-compat: API response vẫn trả sources[] (SourceItem model).
     state.sources = build_sources_for_response(state.retrieved_blocks)
+
+    log.info(
+        "[B5] LegalContext ready: %d evidence, %d citations, %d docs, ctx_chars=%d",
+        len(state.legal_context.evidence),
+        len(state.legal_context.citations),
+        len(state.legal_context.hierarchy.documents),
+        len(state.context_text),
+    )
 
     # ============================================================
     # B6 - LLM GENERATION
@@ -136,7 +180,9 @@ def run_pipeline(
             verifier_llm=engine.get_verifier_llm(),
             question=question,
             answer=state.answer,
-            context_blocks=state.retrieved_blocks,
+            # B5 LegalContext ưu tiên hơn raw retrieved_blocks
+            # (B7 sẽ dùng citation ↔ evidence mapping để verify).
+            legal_context=state.legal_context,
         )
     else:
         from app.core.models import VerificationStatus
@@ -156,6 +202,15 @@ def run_pipeline(
         "intent": state.cleaned.get("intent", ""),
         "retrieved_count": len(state.retrieved_blocks),
         "context_chars": len(state.context_text),
+        # B5 LegalContext stats (cho debug + B7)
+        "legal_context": {
+            "evidence_count": len(state.legal_context.evidence) if state.legal_context else 0,
+            "citation_count": len(state.legal_context.citations) if state.legal_context else 0,
+            "hierarchy_docs": (
+                len(state.legal_context.hierarchy.documents) if state.legal_context else 0
+            ),
+            "stats": state.legal_context.stats if state.legal_context else {},
+        },
     }
 
     return ChatResponse(
