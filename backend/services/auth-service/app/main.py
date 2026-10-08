@@ -51,10 +51,13 @@ app.add_middleware(
 
 _allowed_origins = [
     os.getenv("FRONTEND_URL", "http://localhost:5500").rstrip("/"),
+    os.getenv("ADMIN_FRONTEND_URL", "http://localhost:5174").rstrip("/"),
     "http://localhost:5500",
     "http://127.0.0.1:5500",
-    "http://localhost:5173",
+    "http://localhost:5173",  # user SPA (Vite dev)
     "http://127.0.0.1:5173",
+    "http://localhost:5174",  # admin SPA (Vite dev)
+    "http://127.0.0.1:5174",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]

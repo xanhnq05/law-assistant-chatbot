@@ -135,6 +135,27 @@ services:
     networks:
       - tlpl-net
 
+  admin-frontend:
+    # Admin Document Management SPA — chạy tách biệt ở port 5174,
+    # KHÔNG qua nginx-gateway để tránh rủi ro lộ admin route ra public.
+    build:
+      context: ./admin-frontend
+      dockerfile: Dockerfile
+    image: tro-ly-luat/admin-frontend:latest
+    container_name: tlpl-admin-frontend
+    restart: unless-stopped
+    ports:
+      - "5174:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      - auth-service
+    networks:
+      - tlpl-net
+
   nginx-gateway:
     image: nginx:1.27-alpine
     container_name: tlpl-nginx
