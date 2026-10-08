@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from rag.steps.embedding import step_embed_batch, step_embed_cleaned_query, step_embed_question
+from app.rag.steps.embedding import step_embed_batch, step_embed_cleaned_query, step_embed_question
 
 
 def test_step_embed_question(mock_engine):

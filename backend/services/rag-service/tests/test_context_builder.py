@@ -1,7 +1,7 @@
 """Tests cho B5 - Context Builder."""
 from __future__ import annotations
 
-from rag.steps.context_builder import (
+from app.rag.steps.context_builder import (
     build_context_for_llm,
     build_sources_for_response,
 )

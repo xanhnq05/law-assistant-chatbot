@@ -27,6 +27,12 @@ class ChatRequest(BaseModel):
         default_factory=list,
         description="List of {role, content} messages from recent conversation. Max 6.",
     )
+    # --- MỚI: session_id cho conversation memory (in-process) ---
+    session_id: str = Field(
+        default="",
+        description="ID phiên chat để load history từ in-memory store. "
+                    "Nếu trống → dùng trực tiếp `history` (legacy mode).",
+    )
 
 
 # ============================================================

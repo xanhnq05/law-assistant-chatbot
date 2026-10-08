@@ -35,7 +35,12 @@ async def _shutdown() -> None:
 
 @router.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    """Chạy 7-step pipeline: B1 Orchestrator → B2 → ... → B7 Verification."""
+    """Chạy 7-step pipeline: B1 Orchestrator → B2 → ... → B7 Verification.
+
+    Mới (B2/B4 đợt sửa):
+      - req.session_id: nếu có → load/save memory in-process.
+      - req.history: legacy — dùng khi KHÔNG có session_id.
+    """
     if not engine.get_llm():
         return JSONResponse(
             status_code=503,
@@ -48,6 +53,7 @@ async def chat(req: ChatRequest):
             top_k=req.top_k,
             verify=req.verify,
             history=req.history or None,
+            session_id=req.session_id or None,
         )
         return response
     except Exception as exc:

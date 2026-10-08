@@ -1,7 +1,7 @@
 """Tests cho full 7-step pipeline orchestrator."""
 from __future__ import annotations
 
-from rag.orchestrator import run_pipeline
+from app.rag.orchestrator import run_pipeline
 
 
 def test_run_pipeline_full(mock_engine):
@@ -44,7 +44,7 @@ def test_run_pipeline_top_k_respected(mock_engine):
 
 def test_run_pipeline_engine_not_initialized(mock_llm):
     """Engine chưa init → raise."""
-    from rag.engine import RagEngine
+    from app.rag.engine import RagEngine
     import pytest
 
     engine = RagEngine()
