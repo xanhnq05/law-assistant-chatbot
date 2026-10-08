@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "legal-relationship-schema-1.0.0.json",
+  "title": "Vietnamese Legal Document Relationship Schema",
+  "description": "Canonical schema for relationships between Vietnamese legal documents and the specific legal provisions they amend, add, replace, or repeal.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_document",
+    "target_document",
+    "relationships"
+  ],
+  "properties": {
+    "source_document": {
+      "type": "string",
+      "description": "Stable ID of the document that creates the legal change, e.g. D238-2026-ND-CP."
+    },
+    "target_document": {
+      "type": "string",
+      "description": "Stable ID of the document being amended, supplemented, replaced, or repealed, e.g. D168-2024-ND-CP."
+    },
+    "relationships": {
+      "type": "array",
+      "description": "List of legal relationships from a provision in the source document to a target provision.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_ref",
+          "target_ref",
+          "type"
+        ],
+        "properties": {
+          "source_ref": {
+            "type": "string",
+            "description": "Stable ID of the source provision in the source document."
+          },
+          "target_ref": {
+            "type": "string",
+            "description": "Stable ID of the target provision in the target document. Must refer to an existing node; never guess."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "AMENDS",
+              "ADDS",
+              "REPLACES",
+              "REPEALS"
+            ],
+            "description": "Legal relationship type."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional concise explanation of what the source provision does to the target provision."
+          }
+        }
+      }
+    }
+  }
+}
