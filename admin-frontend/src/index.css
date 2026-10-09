@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   LIGHT THEME — white + gray + blue/gold
+   ============================================================ */
+:root {
+  --bg-deep: #f6f7fb;          /* page background */
+  --surface: #ffffff;          /* card background */
+  --surface-raised: #fafbfd;   /* hover/raised card */
+  --panel: #ffffff;
+  --panel-raised: #f3f4f8;
+  --gold: #c79a3b;             /* primary accent (deeper for contrast on light) */
+  --border: 220 18% 88%;       /* HSL */
+  --input: 220 18% 88%;
+  --ring: 217 91% 60%;
+  --background: 220 30% 97%;
+  --foreground: 222 47% 11%;
+  --primary: 217 91% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 18% 94%;
+  --secondary-foreground: 222 47% 11%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --muted: 220 18% 94%;
+  --muted-foreground: 220 9% 46%;
+  --accent: 38 70% 50%;
+  --accent-foreground: 0 0% 100%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --radius: 0.75rem;
+
+  /* Convenience aliases */
+  --ink: #0f172a;
+  --ink-soft: #475569;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg-deep);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar — light */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.4);
+}

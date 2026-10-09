@@ -1,17 +1,18 @@
 """
-B5 - Context Builder (public surface).
+B5 - Context Builder (public surface, v2 — wrap policy + history-aware fields).
 
 Public functions:
-    - build_context_for_llm(blocks): str       — backward-compat (giữ nguyên)
-    - build_sources_for_response(blocks): list — backward-compat (giữ nguyên)
-    - build_legal_context(...): LegalContext   — NEW: contract chính thức B5 → B6/B7
+    - build_context_for_llm(blocks): str       — backward-compat
+    - build_sources_for_response(blocks): list — backward-compat
+    - build_legal_context(...): LegalContext   — official contract B5 → B6/B7
 
 B5 là contract/interface giữa B4 (Retrieval) và B6/B7 (Gen + Verify).
 Tuyệt đối KHÔNG gọi LLM, KHÔNG suy luận legal content, KHÔNG retrieval lại.
 
-Backward compatibility:
-    - 2 hàm cũ KHÔNG đổi signature / output. Orchestrator cũ vẫn chạy được.
-    - LegalContext là lớp trừu tượng mới; B6/B7 nên migrate dần sang dùng nó.
+Đợt sửa mới (B2/B4):
+  - Wrap retrieval_policy + history_dependent + resolved_query vào RequestInfo.
+  - Mỗi evidence item có thêm is_active/effective_from/to/expansion_kind/expanded_from.
+  - Hierarchy có marker expansion (expanded + expansion_summary).
 """
 from __future__ import annotations
 
@@ -36,7 +37,6 @@ def build_context_for_llm(blocks: list[dict[str, Any]]) -> str:
         --- Nguồn 1 (độ tương đồng: 0.87) ---
         <context_block>
         (Quan hệ: AMENDS -> Article 6 of Nghị định 168)
-
         --- Nguồn 2 ...
 
     Lưu ý:
@@ -84,6 +84,15 @@ def build_context_for_llm(blocks: list[dict[str, Any]]) -> str:
                 for r in rels[:3]
             )
             lines.append(f"[Quan hệ: {rel_text}]")
+        # Highlight trạng thái nếu không active (giúp LLM cảnh báo)
+        if b.get("is_active") is False:
+            warning_bits = []
+            status = b.get("effective_to")
+            if status:
+                warning_bits.append(f"hết hiệu lực {status}")
+            else:
+                warning_bits.append("hết hiệu lực")
+            lines.append(f"[⚠️ Văn bản này có thể đã {' / '.join(warning_bits)}]")
         lines.append("")
 
     return "\n".join(lines).strip()
@@ -125,7 +134,7 @@ def build_sources_for_response(blocks: list[dict[str, Any]]) -> list[dict[str, A
 
 
 # ============================================================
-# NEW: BUILD LEGAL CONTEXT (B5 official contract)
+# NEW: BUILD LEGAL CONTEXT (B5 official contract, v2 — policy + history)
 # ============================================================
 def build_legal_context(
     *,
@@ -137,19 +146,21 @@ def build_legal_context(
 ) -> LegalContext:
     """Build LegalContext (B5 official output) từ:
         - `question`              : raw user query (từ B1)
-        - `cleaned`               : B2 output (cleaned_query, intent, ...)
-        - `retrieved_blocks`      : B4 output (list[dict])
+        - `cleaned`               : B2 output (cleaned_query, intent, retrieval_policy,
+                                     resolved_query, history_dependent, missing_facts)
+        - `retrieved_blocks`      : B4 output (list[dict], có thêm is_active,
+                                     expansion_kind, expanded_from)
         - `retrieval_query`       : B3 enriched query (mặc định = cleaned_query + terms)
         - `max_evidence`          : cap số evidence cho B6 context window
 
     Returns:
         LegalContext (Pydantic). Gồm:
-            - request     (echo từ B2/B3)
-            - evidence[]  (structured source of truth)
-            - hierarchy   (group theo Document→Chapter→Article→Clause)
+            - request     (echo từ B2/B3 + retrieval_policy + history fields)
+            - evidence[]  (structured source of truth + status + expansion fields)
+            - hierarchy   (group theo Document→Chapter→Article→Clause + expansion markers)
             - formatted_context (LLM-ready string, reuse build_context_for_llm)
             - citations[] (1-1 với evidence, có FK evidence_id)
-            - stats       (cho B7 + debug)
+            - stats       (cho B7 + debug, bao gồm retrieval_policy echo)
 
     Lưu ý:
         - Hàm này KHÔNG gọi LLM, KHÔNG retrieval.
@@ -157,23 +168,36 @@ def build_legal_context(
           KHÔNG phá vỡ format mà B6 đã test.
         - `evidence` và `citations` derive từ B4 block + dedup theo stable_id.
     """
-    # Build RequestInfo
+    # ===== Build RequestInfo (đã có policy + history_dependent) =====
     key_terms = list(cleaned.get("key_legal_terms") or [])
-    normalized = str(cleaned.get("cleaned_query") or question or "")
+    resolved_q = str(
+        cleaned.get("resolved_query")
+        or cleaned.get("cleaned_query")
+        or question
+        or ""
+    )
+    normalized = str(cleaned.get("cleaned_query") or resolved_q or question or "")
     if retrieval_query is None:
         if key_terms:
             retrieval_query = f"{normalized}\nThuật ngữ: {' '.join(key_terms[:5])}"
         else:
             retrieval_query = normalized
 
+    # Policy + history fields (mặc định rỗng nếu B2 không truyền)
+    retrieval_policy = cleaned.get("retrieval_policy") or {}
+    history_dependent = bool(cleaned.get("history_dependent", False))
+
     request = RequestInfo(
         original_query=str(question or ""),
         normalized_query=normalized,
         retrieval_query=retrieval_query,
-        language="vi",  # project hiện chỉ VI; để configurable sau
+        language="vi",
         intent=str(cleaned.get("intent") or "general_info"),
         legal_domain=str(cleaned.get("legal_domain") or ""),
         key_terms=key_terms,
+        resolved_query=resolved_q,
+        history_dependent=history_dependent,
+        retrieval_policy=retrieval_policy,
     )
 
     # Reuse existing formatter để B6 không phải đổi

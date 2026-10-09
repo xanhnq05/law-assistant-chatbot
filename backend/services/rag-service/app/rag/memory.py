@@ -1,15 +1,12 @@
 """
-Conversation Memory Manager.
+Conversation Memory Manager (extended).
 
-Responsibilities:
-  1. In-process cache (LRU + TTL) cho active sessions — singleton.
-  2. MongoDB persistence (best-effort fallback) — optional, không break nếu down.
-  3. Background auto-summarization khi session vượt threshold.
-
-Theo HANDOVER_NHA.md: dev1 đã để skeleton in-process. Dev2 bổ sung:
-  - MongoDB persistence layer
-  - Background thread cho summary
-  - Hook tở integration LLM cho summary (dùng Groq fast model)
+Cải tiến so với phiên bản gốc (in-process only):
+  - Thêm MongoDB persistence (best-effort fallback) — optional
+  - Background thread auto-summarization
+  - Heuristic summary fallback khi không có LLM provider
+  - LRU eviction (max 500 sessions)
+  - Public API cho shutdown hook
 
 Public API:
   - ConversationMemory  (singleton)
@@ -18,7 +15,6 @@ Public API:
 """
 from __future__ import annotations
 
-import json
 import logging
 import threading
 import time
@@ -37,7 +33,7 @@ SESSION_IDLE_TTL_SECONDS = 2 * 3600 # 2 giờ
 SUMMARY_TRIGGER_MESSAGES = 10      # Khi >= 10 msg → trigger summary
 MAX_SESSIONS_IN_MEMORY = 500       # LRU cap
 
-SUMMARY_PROMPT = """Bạn là trợ lý pháp lý. Tóm tắt ngắn gọn (≤ 200 từ) cuộc hội thoại sau
+SUMMARY_PROMPT_TEMPLATE = """Bạn là trợ lý pháp lý. Tóm tắt ngắn gọn (≤ 200 từ) cuộc hội thoại sau
 thành các ý chính, giữ lại:
   - Câu hỏi pháp luật đã hỏi
   - Điều luật / Nghị định đã được trích dẫn
@@ -52,10 +48,11 @@ Tóm tắt (tiếng Việt, ngắn gọn):"""
 
 
 # ============================================================
-# SESSION MODEL
+# DATA MODELS
 # ============================================================
 @dataclass
 class Message:
+    """Một message trong session."""
     role: str
     content: str
     created_at: float = field(default_factory=time.time)
@@ -81,18 +78,29 @@ class Message:
 
 @dataclass
 class Session:
+    """Một phiên chat trong memory."""
     session_id: str
     messages: list[Message] = field(default_factory=list)
     summary: str = ""
     created_at: float = field(default_factory=time.time)
     last_active: float = field(default_factory=time.time)
     needs_summary: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def touch(self) -> None:
         self.last_active = time.time()
 
     def is_expired(self, ttl_seconds: int = SESSION_IDLE_TTL_SECONDS) -> bool:
         return (time.time() - self.last_active) > ttl_seconds
+
+    def to_history(self, max_msgs: int = MAX_HISTORY_FOR_QUERY) -> list[dict[str, str]]:
+        """Trả về format {role, content} tương thích ChatRequest.history."""
+        recent = self.messages[-max_msgs:]
+        return [{"role": m.role, "content": m.content} for m in recent]
+
+    def get_messages(self) -> list[dict[str, Any]]:
+        """Trả về toàn bộ messages (raw, kèm ts/metadata). Cho internal/test."""
+        return [m.to_dict() for m in self.messages]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -102,17 +110,6 @@ class Session:
             "created_at": self.created_at,
             "last_active": self.last_active,
         }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Session":
-        return cls(
-            session_id=str(data.get("session_id", "")),
-            messages=[Message.from_dict(m) for m in (data.get("messages") or [])],
-            summary=str(data.get("summary") or ""),
-            created_at=float(data.get("created_at") or time.time()),
-            last_active=float(data.get("last_active") or time.time()),
-            needs_summary=False,
-        )
 
 
 # ============================================================
@@ -279,7 +276,7 @@ class _BackgroundSummarizer:
         self.enabled = True
 
     def set_llm_provider(self, provider) -> None:
-        """Set/get LLM callable: (transcript: str) -> summary: str."""
+        """Set LLM callable: (transcript: str) -> summary: str."""
         self._llm_provider = provider
 
     def start(self) -> None:
@@ -316,7 +313,7 @@ class _BackgroundSummarizer:
                     self._cv.wait(timeout=1.0)
                 if self._stop.is_set():
                     return
-                # Pop one session (FIFO-ish: lấy cuối dict = last inserted)
+                # Pop one session
                 session_id, session = next(reversed(self._queue.items()))
                 self._queue.pop(session_id, None)
 
@@ -451,6 +448,13 @@ class ConversationMemory:
                 "summarizer_queue_size": len(self._summarizer._queue),
             }
 
+    def get_session_messages(self, session_id: str) -> list[dict[str, Any]]:
+        """Backward-compat: trả về raw messages (cho test/debug)."""
+        sess = self.get(session_id)
+        if sess is None:
+            return []
+        return sess.get_messages()
+
     # ── Message ops ────────────────────────────────────────────────────
     def add_message(
         self,
@@ -500,8 +504,7 @@ class ConversationMemory:
         sess = self.get(session_id)
         if sess is None:
             return []
-        recent = sess.messages[-max_msgs:]
-        return [{"role": m.role, "content": m.content} for m in recent]
+        return sess.to_history(max_msgs)
 
     def get_context_summary(self, session_id: str) -> str:
         sess = self.get(session_id)
@@ -539,7 +542,7 @@ class ConversationMemory:
 
 
 # ============================================================
-# SINGLETON
+# SINGLETON ACCESSOR
 # ============================================================
 _memory_singleton: ConversationMemory | None = None
 _singleton_lock = threading.Lock()

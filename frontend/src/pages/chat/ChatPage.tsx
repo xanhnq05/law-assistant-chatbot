@@ -65,7 +65,6 @@ export default function ChatPage() {
   const setSending = useChatStore((s) => s.setSending);
   const addGuestUserMessage = useChatStore((s) => s.addGuestUserMessage);
   const addGuestAssistantMessage = useChatStore((s) => s.addGuestAssistantMessage);
-  const resetGuestChat = useChatStore((s) => s.resetGuestChat);
   const deleteSessionLocal = useChatStore((s) => s.deleteSession);
   const clearAllSessions = useChatStore((s) => s.clearAllSessions);
 

@@ -27,14 +27,18 @@ class ChatRequest(BaseModel):
         default_factory=list,
         description="List of {role, content} messages from recent conversation. Max 6.",
     )
-    # Session ID cho ConversationMemory — optional. Nếu không có → 'default'.
+    # --- MỚI: session_id cho conversation memory (in-process) ---
     session_id: str | None = Field(
         default=None,
         max_length=128,
-        description="ID phiên chat để tra cứu history từ Memory Manager.",
+        description="ID phiên chat để load/save history từ Memory Manager. "
+                    "Nếu None/empty → dùng trực tiếp `history` (legacy mode).",
     )
-    # Bật/tắt follow-up generation (B8). Mặc định bật.
-    generate_followups: bool = Field(default=True)
+    # --- MỚI (B8): bật/tắt follow-up generation ---
+    generate_followups: bool = Field(
+        default=True,
+        description="Bật/tắt B8 follow-up generation. Mặc định bật.",
+    )
 
 
 # ============================================================
@@ -90,9 +94,10 @@ class ChatResponse(BaseModel):
     answer: str
     sources: list[SourceItem]
     verification: VerificationResult
-    # B8: follow-up questions (optional, có thể rỗng nếu verification FAIL).
+    # --- MỚI (B8): follow-up questions ---
     followups: list[dict[str, str]] = Field(
         default_factory=list,
-        description="Gợi ý câu hỏi tiếp theo. Mỗi item: {question, rationale, related_article, confidence}.",
+        description="Gợi ý câu hỏi tiếp theo (B8). Mỗi item: "
+                    "{question, rationale, related_article, confidence}.",
     )
     debug: dict[str, Any]

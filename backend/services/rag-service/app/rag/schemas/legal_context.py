@@ -42,9 +42,24 @@ class RequestInfo(BaseModel):
     normalized_query: str = Field(..., description="Output B2 (cleaned_query).")
     retrieval_query: str = Field(..., description="Query thực tế dùng cho embedding (B3).")
     language: str = Field(default="vi", description="Mặc định 'vi' (project hiện chỉ VI).")
-    intent: str = Field(default="general_info", description="B2 intent: penalty/rule/procedure/general_info.")
+    intent: str = Field(default="general_info", description="B2 intent: penalty/rule/procedure/general_info/list_chapters/list_articles/list_clauses/missing_fact_query.")
     legal_domain: str = Field(default="", description="B2 legal_domain.")
     key_terms: list[str] = Field(default_factory=list, description="B2 key_legal_terms.")
+    # --- B2 mới: conversation-aware + retrieval policy ---
+    resolved_query: str = Field(
+        default="",
+        description="Câu hỏi sau khi resolve đại từ tham chiếu từ conversation history. "
+                    "Bằng original_query nếu không có history.",
+    )
+    history_dependent: bool = Field(
+        default=False,
+        description="True nếu câu hỏi cần history mới hiểu được (follow-up).",
+    )
+    retrieval_policy: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Retrieval policy cho B4: intensity, expansion, max_evidence_hint, filters. "
+                    "Đây là contract chính thức B2→B4.",
+    )
 
 
 # ============================================================
@@ -134,6 +149,29 @@ class EvidenceItem(BaseModel):
     # khác (law_document_*, chapter_number, v.v.) mà không cần đổi schema.
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    # --- B4 mới: status + expansion ---
+    is_active: bool = Field(
+        default=True,
+        description="Document active/inactive tại thời điểm query. Default True để back-compat.",
+    )
+    effective_from: str | None = Field(
+        default=None,
+        description="Ngày bắt đầu hiệu lực (ISO YYYY-MM-DD).",
+    )
+    effective_to: str | None = Field(
+        default=None,
+        description="Ngày hết hiệu lực (ISO YYYY-MM-DD). None = vô thời hạn.",
+    )
+    expansion_kind: Literal["anchor", "horizontal", "up", "down", "neighbor"] = Field(
+        default="anchor",
+        description="anchor=gốc từ Pinecone; horizontal=siblings cùng Article; "
+                    "up=parent level; down=child level; neighbor=UP+DOWN+horizontal.",
+    )
+    expanded_from: list[str] = Field(
+        default_factory=list,
+        description="vector_id của anchor node mà node này được mở rộng ra.",
+    )
+
 
 # ============================================================
 # HIERARCHY (group evidence theo cấu trúc pháp luật)
@@ -180,6 +218,15 @@ class HierarchyModel(BaseModel):
 
     documents: list[DocumentRef] = Field(default_factory=list)
     ungrouped_evidence_ids: list[str] = Field(default_factory=list)
+    # --- B4 mới: expansion markers ---
+    expanded: bool = Field(
+        default=False,
+        description="True nếu retrieval_policy.expansion != 'none' (có node được mở rộng).",
+    )
+    expansion_summary: str = Field(
+        default="",
+        description="Human-readable summary của expansion đã thực hiện. VD: 'siblings: Article 6: 4 clauses'.",
+    )
 
 
 # ============================================================
@@ -441,11 +488,31 @@ class LegalContextBuilder:
                     boosted=bool(block.get("boosted", False)),
                     amendments=list(block.get("related_amendments") or []),
                     metadata=block,
+                    # --- B4 mới ---
+                    is_active=bool(block.get("is_active", True)),
+                    effective_from=block.get("effective_from"),
+                    effective_to=block.get("effective_to"),
+                    expansion_kind=block.get("expansion_kind") or "anchor",
+                    expanded_from=list(block.get("expanded_from") or []),
                 )
             )
 
         # 5) Build hierarchy
         hierarchy = self._build_hierarchy(evidence_items)
+
+        # 5b) Update hierarchy markers về expansion (nếu có)
+        expansion_counts: dict[str, int] = {}
+        for ev in evidence_items:
+            expansion_counts[ev.expansion_kind] = expansion_counts.get(ev.expansion_kind, 0) + 1
+        if "horizontal" in expansion_counts or "up" in expansion_counts or "down" in expansion_counts or "neighbor" in expansion_counts:
+            hierarchy.expanded = True
+            parts = []
+            if expansion_counts.get("anchor"):
+                parts.append(f"anchor:{expansion_counts['anchor']}")
+            for kind in ("horizontal", "up", "down", "neighbor"):
+                if expansion_counts.get(kind):
+                    parts.append(f"{kind}:{expansion_counts[kind]}")
+            hierarchy.expansion_summary = ", ".join(parts)
 
         # 6) Build citations 1-1
         citations: list[CitationItem] = []
@@ -455,6 +522,15 @@ class LegalContextBuilder:
             citations.append(
                 self._build_citation_item(ev.metadata, citation_id, ev.evidence_id)
             )
+
+        # 7) Update stats với policy + expansion (request.retrieval_policy populated)
+        if request.retrieval_policy:
+            stats["retrieval_policy"] = request.retrieval_policy
+        if expansion_counts:
+            stats["expansion_executed"] = {
+                "kind_counts": expansion_counts,
+                "dropped_inactive": sum(1 for ev in evidence_items if not ev.is_active and ev.expansion_kind == "anchor"),
+            }
 
         return LegalContext(
             request=request,

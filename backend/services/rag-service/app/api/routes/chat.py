@@ -5,15 +5,15 @@ POST /api/chat
         "question": "...",
         "top_k": 5,
         "verify": true,
-        "history": [...],           # optional, overridden by session_id if provided
-        "session_id": "...",        # optional, for Memory Manager
-        "generate_followups": true  # optional, B8 toggle
+        "history": [...],            # optional, overridden by session_id if provided
+        "session_id": "...",         # optional, for Memory Manager
+        "generate_followups": true   # optional, B8 toggle
     }
     response: {
         "answer": "...",
         "sources": [...],
         "verification": {...},
-        "followups": [...],          # B8 output
+        "followups": [...],           # B8 output
         "debug": {...}
     }
 """
@@ -45,12 +45,19 @@ async def _startup() -> None:
 @router.on_event("shutdown")
 async def _shutdown() -> None:
     engine.close()
+    # Cleanup background summarizer thread của Memory Manager
     shutdown_memory()
 
 
 @router.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    """Chạy pipeline: B1 Orchestrator → B2 → ... → B8 Follow-up."""
+    """Chạy pipeline: B1 Orchestrator → B2 → ... → B8 Follow-up.
+
+    Mới (B2/B4 đợt sửa):
+      - req.session_id: nếu có → load/save memory in-process.
+      - req.history: legacy — dùng khi KHÔNG có session_id.
+      - req.generate_followups: bật/tắt B8 (default True).
+    """
     if not engine.get_llm():
         return JSONResponse(
             status_code=503,
@@ -63,7 +70,7 @@ async def chat(req: ChatRequest):
             top_k=req.top_k,
             verify=req.verify,
             history=req.history or None,
-            session_id=req.session_id,
+            session_id=req.session_id or None,
             generate_followups=req.generate_followups,
         )
         return response

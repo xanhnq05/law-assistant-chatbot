@@ -8,7 +8,10 @@ import pytest
 
 @pytest.fixture
 def mock_llm():
-    """Mock ChatGroq LLM (trả về JSON string cho B2/B7)."""
+    """Mock ChatGroq LLM (trả về JSON string cho B2/B7).
+
+    V2: support đủ prompts mới (FOLLOWUP_RESOLVER + QUERY_CLEANER 7 trường).
+    """
     llm = MagicMock()
 
     def _invoke(messages):
@@ -23,12 +26,20 @@ def mock_llm():
                 break
         # Default: trả JSON giả lập
         resp = MagicMock()
-        if "LÀM SẠCH" in sys_msg or "QUERY_CLEANER" in sys_msg or "cleaner" in sys_msg.lower():
+        if "FOLLOWUP_RESOLVER" in sys_msg or "RESOLVE câu hỏi follow-up" in sys_msg:
+            resp.content = (
+                '{"resolved_query":"phạt ô tô không nhường đường",'
+                '"history_dependent":true,'
+                '"context_summary":"đang nói về phạt xe máy"}'
+            )
+        elif "LÀM SẠCH" in sys_msg or "QUERY_CLEANER" in sys_msg or "cleaner" in sys_msg.lower():
             resp.content = (
                 '{"cleaned_query":"phạt xe máy không nhường đường",'
                 '"legal_domain":"xử phạt giao thông",'
                 '"key_legal_terms":["phạt","xe máy","không nhường đường"],'
-                '"intent":"penalty_lookup"}'
+                '"intent":"penalty_lookup",'
+                '"expansion_hint":"default",'
+                '"missing_facts":[]}'
             )
         elif "verifier" in sys_msg.lower() or "GRAND" in sys_msg:
             resp.content = (
@@ -123,9 +134,11 @@ def mock_engine(mock_llm, sample_context_blocks):
     engine.get_llm.return_value = mock_llm
     engine.get_verifier_llm.return_value = mock_llm
 
-    # Mock embedder
+    # Mock embedder - trả object numpy-like có .tolist() (patch attribute động)
+    import numpy as _np
     embedder = MagicMock()
-    embedder.encode.return_value = [[0.1] * 384]
+    _fake_arr = _np.array([[0.1] * 384], dtype=_np.float32)
+    embedder.encode.return_value = _fake_arr
     engine.get_embedder.return_value = embedder
 
     # Mock Pinecone
@@ -137,6 +150,7 @@ def mock_engine(mock_llm, sample_context_blocks):
             metadata={
                 "type": "clause",
                 "document_id": "D168-2024-ND-CP",
+                "document_type": "Nghị định",
                 "chapter_id": "D168-2024-ND-CP-CII",
                 "article_id": "D168-2024-ND-CP-A-6",
                 "clause_id": "D168-2024-ND-CP-A-6-K4",
@@ -148,6 +162,7 @@ def mock_engine(mock_llm, sample_context_blocks):
             metadata={
                 "type": "article",
                 "document_id": "L36-2024-QH15",
+                "document_type": "Luật",
                 "chapter_id": "L36-2024-QH15-CIII",
                 "article_id": "L36-2024-QH15-A-15",
                 "clause_id": "",
