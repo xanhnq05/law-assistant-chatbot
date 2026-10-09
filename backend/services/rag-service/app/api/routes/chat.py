@@ -1,8 +1,21 @@
-"""RAG public route - thin wrapper around the 7-step orchestrator.
+"""RAG public route - thin wrapper around the orchestrator (B1-B8).
 
 POST /api/chat
-    request : { "question": "...", "top_k": 5, "verify": true }
-    response: { "answer": "...", "sources": [...], "verification": {...}, "debug": {...} }
+    request : {
+        "question": "...",
+        "top_k": 5,
+        "verify": true,
+        "history": [...],           # optional, overridden by session_id if provided
+        "session_id": "...",        # optional, for Memory Manager
+        "generate_followups": true  # optional, B8 toggle
+    }
+    response: {
+        "answer": "...",
+        "sources": [...],
+        "verification": {...},
+        "followups": [...],          # B8 output
+        "debug": {...}
+    }
 """
 from __future__ import annotations
 
@@ -12,6 +25,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import log
 from app.core.models import ChatRequest, ChatResponse
 from app.rag.engine import RagEngine
+from app.rag.memory import shutdown_memory
 from app.rag.orchestrator import run_pipeline
 
 
@@ -31,11 +45,12 @@ async def _startup() -> None:
 @router.on_event("shutdown")
 async def _shutdown() -> None:
     engine.close()
+    shutdown_memory()
 
 
 @router.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    """Chạy 7-step pipeline: B1 Orchestrator → B2 → ... → B7 Verification."""
+    """Chạy pipeline: B1 Orchestrator → B2 → ... → B8 Follow-up."""
     if not engine.get_llm():
         return JSONResponse(
             status_code=503,
@@ -48,6 +63,8 @@ async def chat(req: ChatRequest):
             top_k=req.top_k,
             verify=req.verify,
             history=req.history or None,
+            session_id=req.session_id,
+            generate_followups=req.generate_followups,
         )
         return response
     except Exception as exc:

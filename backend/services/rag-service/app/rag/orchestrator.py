@@ -16,15 +16,17 @@ State machine:
                                              (giữ cho back-compat với B6 cũ)
   state.answer            (str)            : output của B6
   state.verification      (VerifyResult)   : output của B7
+  state.followups         (list[dict])     : output của B8
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.core.config import RERANKER_ENABLED, log
+from app.core.config import FOLLOWUP_ENABLED, FOLLOWUP_NUM_DEFAULT, RERANKER_ENABLED, log
 from app.core.models import ChatResponse, SourceItem, VerificationResult
 from app.rag.engine import RagEngine
+from app.rag.memory import get_memory
 from app.rag.schemas.legal_context import LegalContext
 from app.rag.steps.cleaner import step_clean_query
 from app.rag.steps.context_builder import (
@@ -33,6 +35,7 @@ from app.rag.steps.context_builder import (
     build_sources_for_response,
 )
 from app.rag.steps.embedding import step_embed_cleaned_query
+from app.rag.steps.followup_generator import step_generate_followups
 from app.rag.steps.generator import step_generate_answer
 from app.rag.steps.retrieval import step_retrieve_hybrid
 from app.rag.steps.verification import step_verify_answer
@@ -48,7 +51,7 @@ B5_MAX_EVIDENCE = 10
 
 @dataclass
 class PipelineState:
-    """State container cho 7-step pipeline."""
+    """State container cho pipeline (B1-B8)."""
 
     question: str
     cleaned: dict[str, Any] = field(default_factory=dict)
@@ -59,6 +62,7 @@ class PipelineState:
     answer: str = ""
     verification: VerificationResult | None = None
     sources: list[dict[str, Any]] = field(default_factory=list)
+    followups: list[dict[str, Any]] = field(default_factory=list)
     debug: dict[str, Any] = field(default_factory=dict)
 
 
@@ -71,9 +75,11 @@ def run_pipeline(
     top_k: int = 5,
     verify: bool = True,
     history: list[dict[str, str]] | None = None,
+    session_id: str | None = None,
+    generate_followups: bool = True,
 ) -> ChatResponse:
     """
-    Chạy đầy đủ 7-step pipeline và trả về ChatResponse.
+    Chạy đầy đủ pipeline và trả về ChatResponse.
 
     Luồng (theo image 1):
       B1. Orchestrator (hàm này)
@@ -83,15 +89,36 @@ def run_pipeline(
       B5. Context Builder
       B6. LLM Generation (Groq) — nhận thêm history để multi-turn
       B7. Symbolic Verification (hybrid rule + LLM-as-Judge)
+      B8. Follow-up Generator (chỉ chạy khi PASS)
 
     Args:
-        history: danh sách {role: "user"|"assistant", content: str} gần đây.
-                 Tối đa 3 cặp (6 message) để tránh hết context window.
+        history:           danh sách {role: "user"|"assistant", content: str} gần đây.
+                           Nếu `session_id` được truyền → load từ Memory Manager
+                           (override `history`).
+        session_id:        ID phiên chat cho Memory Manager (optional).
+        generate_followups: bật/tắt B8 follow-up generation.
     """
     if engine.get_llm() is None:
         raise RuntimeError("RAG engine chưa được khởi tạo. Gọi engine.init() trước.")
 
     state = PipelineState(question=question)
+
+    # ============================================================
+    # MEMORY: load history từ session_id (nếu có)
+    # ============================================================
+    memory = get_memory()
+    effective_session_id = session_id or "default"
+
+    if not history and effective_session_id:
+        # Load history từ Memory Manager (ưu tiên hơn history truyền vào).
+        loaded_history = memory.get_history_for_query(effective_session_id)
+        if loaded_history:
+            history = loaded_history
+            log.info(
+                "[B1] Loaded %d msgs from memory session=%s",
+                len(history),
+                effective_session_id,
+            )
 
     # ============================================================
     # B2 - CLEANER
@@ -194,6 +221,43 @@ def run_pipeline(
         )
 
     # ============================================================
+    # B8 - FOLLOW-UP GENERATOR (chỉ chạy khi verification PASS)
+    # ============================================================
+    if FOLLOWUP_ENABLED and generate_followups:
+        log.info("[B8] Generating follow-up questions ...")
+        state.followups = step_generate_followups(
+            llm=engine.get_llm(),
+            question=question,
+            answer=state.answer,
+            legal_context=state.legal_context,
+            verification=state.verification,
+            num=FOLLOWUP_NUM_DEFAULT,
+        )
+    else:
+        log.info(
+            "[B8] Skipped (FOLLOWUP_ENABLED=%s, generate_followups=%s)",
+            FOLLOWUP_ENABLED, generate_followups,
+        )
+
+    # ============================================================
+    # MEMORY: save exchange vào session (sau khi đã verify + follow-up)
+    # ============================================================
+    try:
+        memory.add_exchange(
+            session_id=effective_session_id,
+            user_message=question,
+            assistant_message=state.answer,
+            verification_status=state.verification.status.value if state.verification else "unknown",
+            confidence=state.verification.confidence if state.verification else 0.0,
+            followups_count=len(state.followups),
+        )
+    except Exception as exc:
+        log.warning(
+            "[Memory] Failed to save exchange for session=%s: %s",
+            effective_session_id, exc,
+        )
+
+    # ============================================================
     # BUILD RESPONSE
     # ============================================================
     state.debug = {
@@ -212,11 +276,17 @@ def run_pipeline(
             ),
             "stats": state.legal_context.stats if state.legal_context else {},
         },
+        # B8 follow-up stats
+        "followup_count": len(state.followups),
+        # Memory session
+        "session_id": effective_session_id,
+        "memory_stats": memory.stats(),
     }
 
     return ChatResponse(
         answer=state.answer,
         sources=[SourceItem(**s) for s in state.sources],
         verification=state.verification,
+        followups=state.followups,
         debug=state.debug,
     )

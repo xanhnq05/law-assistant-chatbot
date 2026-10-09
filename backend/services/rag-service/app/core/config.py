@@ -127,3 +127,25 @@ LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "law assistant chatbot")
 # CORS
 # ============================================================
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
+
+
+# ============================================================
+# MEMORY MANAGER (Conversation Memory + MongoDB persistence)
+# ============================================================
+# MongoDB URI để persist conversation. Optional — để trống = in-process only.
+# Theo PDF "Với stack hiện tại, có thể dùng MongoDB".
+MONGODB_URI = os.getenv("MONGODB_URI", "").strip() or None
+MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "rag_memory")
+
+# Background summarization trigger (số message tối thiểu trước khi auto-summarize).
+SUMMARY_TRIGGER_MESSAGES = int(os.getenv("SUMMARY_TRIGGER_MESSAGES", "10"))
+
+
+# ============================================================
+# FOLLOW-UP GENERATOR (B8)
+# ============================================================
+# Số câu follow-up mặc định (max 5).
+FOLLOWUP_NUM_DEFAULT = int(os.getenv("FOLLOWUP_NUM_DEFAULT", "3"))
+FOLLOWUP_NUM_MAX = int(os.getenv("FOLLOWUP_NUM_MAX", "5"))
+# Bật/tắt follow-up generation. Tắt để tiết kiệm token khi không cần.
+FOLLOWUP_ENABLED = os.getenv("FOLLOWUP_ENABLED", "true").lower() == "true"
