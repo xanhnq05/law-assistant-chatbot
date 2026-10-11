@@ -142,7 +142,11 @@ def _enrich_with_status(
 
 
 def _today_iso() -> str:
-    """Trả về ngày hiện tại UTC ISO."""
+    """Trả về ngày hiện tại UTC ISO. Hỗ trợ ENV `TODAY_OVERRIDE` (YYYY-MM-DD) cho test."""
+    import os
+    override = os.getenv("TODAY_OVERRIDE")
+    if override:
+        return override
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 

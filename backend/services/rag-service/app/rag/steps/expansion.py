@@ -448,6 +448,13 @@ def expand_all(
 # HELPERS
 # ============================================================
 def _today_iso() -> str:
-    """Trả về ngày hiện tại dạng ISO YYYY-MM-DD (UTC). Cho testing có thể override."""
+    """Trả về ngày hiện tại dạng ISO YYYY-MM-DD (UTC). Cho testing có thể override.
+
+    Ưu tiên ENV `TODAY_OVERRIDE` (YYYY-MM-DD) để test reproducible.
+    """
+    import os
+    override = os.getenv("TODAY_OVERRIDE")
+    if override:
+        return override
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")

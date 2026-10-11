@@ -127,3 +127,17 @@ LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT", "law assistant chatbot")
 # CORS
 # ============================================================
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
+
+
+# ============================================================
+# B2/B4 RETRIEVAL POLICY (Plan §10 #7)
+# ============================================================
+# Default retrieval intensity dùng khi policy.intensity không do B2 set rõ ràng.
+# Một trong: "default" | "deep" | "list".
+DEFAULT_RETRIEVAL_INTENSITY = os.getenv(
+    "DEFAULT_RETRIEVAL_INTENSITY", "default"
+).lower()
+# Override ngày hệ thống cho status filter (định dạng YYYY-MM-DD).
+# Dùng cho test reproducible (vd: TODAY_OVERRIDE=2024-01-01).
+# Để None = dùng datetime.now(timezone.utc).
+TODAY_OVERRIDE: str | None = os.getenv("TODAY_OVERRIDE") or None

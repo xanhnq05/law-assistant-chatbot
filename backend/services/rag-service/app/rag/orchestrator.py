@@ -22,7 +22,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.core.config import RERANKER_ENABLED, log
+from app.core.config import (
+    DEFAULT_RETRIEVAL_INTENSITY,
+    RERANKER_ENABLED,
+    TODAY_OVERRIDE,
+    log,
+)
 from app.core.models import ChatResponse, SourceItem, VerificationResult
 from app.rag.engine import RagEngine
 from app.rag.schemas.legal_context import LegalContext
@@ -44,6 +49,8 @@ from app.rag.steps.verification import step_verify_answer
 # Cap evidence B5 đưa vào LegalContext (để B6 prompt không bị tràn).
 # B6 vẫn còn MAX_CONTEXT_CHARS=6000 như một lớp an toàn thứ 2.
 B5_MAX_EVIDENCE = 10
+# TODAY_OVERRIDE + DEFAULT_RETRIEVAL_INTENSITY đã được expose trong app.core.config
+# (xem Plan §10 #7). Ở đây chỉ re-import để log.
 
 
 @dataclass
