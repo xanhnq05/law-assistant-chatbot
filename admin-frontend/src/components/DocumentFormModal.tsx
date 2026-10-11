@@ -11,6 +11,7 @@ import {
   type DocumentRecord,
   type DocumentType,
 } from "@/services/documentService";
+import { displayToIsoDate, isoToDisplayDate, maskDateInput } from "@/lib/utils";
 
 const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
   { value: "ORIGINAL", label: "Văn bản gốc" },
@@ -106,15 +107,6 @@ function extractDocNumber(filename: string): string {
   return m ? m[1] : "";
 }
 
-/** Lấy ngày hôm nay dạng YYYY-MM-DD cho input[type=date]. */
-function todayIso(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 export default function DocumentFormModal({
   open,
   mode,
@@ -126,6 +118,9 @@ export default function DocumentFormModal({
   const [form, setForm] = useState<FormState>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
   const [customAuthority, setCustomAuthority] = useState<string>("");
+  // NEW: State cho hiển thị ngày dạng dd/mm/yyyy (state nội bộ vẫn giữ YYYY-MM-DD)
+  const [dateEnactedDisplay, setDateEnactedDisplay] = useState<string>("");
+  const [dateEffectiveDisplay, setDateEffectiveDisplay] = useState<string>("");
 
   // isEdit phải được tính TRƯỚC khi dùng cho isDocProcessing
   const isEdit = mode === "edit";
@@ -171,9 +166,13 @@ export default function DocumentFormModal({
         issuingAuthority: iaRaw || "Chính phủ",
         amendsDocumentId: m.amends_document_id ?? "",
       });
+      setDateEnactedDisplay(isoToDisplayDate(m.date_enacted ?? ""));
+      setDateEffectiveDisplay(isoToDisplayDate(m.date_effective ?? ""));
     } else if (mode === "create") {
       setCustomAuthority("");
       setForm(emptyForm());
+      setDateEnactedDisplay("");
+      setDateEffectiveDisplay("");
     }
   }, [open, mode, initialDoc]);
 
@@ -307,8 +306,6 @@ export default function DocumentFormModal({
   const titleText = isEdit
     ? `Chỉnh sửa văn bản: ${initialDoc?.metadata.title ?? initialDoc?.doc_id}`
     : "Thêm văn bản mới";
-
-  const today = todayIso();
 
   // Gom logic disable: disable khi đang submit HOẶC đang processing
   const formDisabled = submitting || isDocProcessing;
@@ -500,25 +497,73 @@ export default function DocumentFormModal({
               </select>
             </div>
 
-            {/* Ngày ban hành — max = today */}
-            <Field
-              label="Ngày ban hành *"
-              type="date"
-              value={form.dateEnacted}
-              max={today}
-              onChange={(v) => setForm((p) => ({ ...p, dateEnacted: v }))}
-              disabled={formDisabled}
-            />
+            {/* Ngày ban hành — format dd/mm/yyyy, payload YYYY-MM-DD */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Ngày ban hành *
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="dd/mm/yyyy"
+                value={dateEnactedDisplay}
+                onChange={(e) => {
+                  const masked = maskDateInput(e.target.value);
+                  setDateEnactedDisplay(masked);
+                  const iso = displayToIsoDate(masked);
+                  // Chỉ commit vào form khi user gõ đủ 8 số và hợp lệ
+                  setForm((p) => ({ ...p, dateEnacted: iso ?? "" }));
+                }}
+                onBlur={() => {
+                  // Nếu blur mà chưa hợp lệ → clear để tránh submit sai
+                  if (
+                    dateEnactedDisplay &&
+                    !displayToIsoDate(dateEnactedDisplay)
+                  ) {
+                    setDateEnactedDisplay("");
+                    setForm((p) => ({ ...p, dateEnacted: "" }));
+                  }
+                }}
+                disabled={formDisabled}
+                className="w-full rounded-lg bg-white border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Định dạng: dd/mm/yyyy (vd: 15/10/2024). Không được ở tương lai.
+              </p>
+            </div>
 
-            {/* Ngày có hiệu lực — min = date_enacted */}
-            <Field
-              label="Ngày có hiệu lực *"
-              type="date"
-              value={form.dateEffective}
-              min={form.dateEnacted || undefined}
-              onChange={(v) => setForm((p) => ({ ...p, dateEffective: v }))}
-              disabled={formDisabled}
-            />
+            {/* Ngày có hiệu lực — format dd/mm/yyyy, payload YYYY-MM-DD */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Ngày có hiệu lực *
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="dd/mm/yyyy"
+                value={dateEffectiveDisplay}
+                onChange={(e) => {
+                  const masked = maskDateInput(e.target.value);
+                  setDateEffectiveDisplay(masked);
+                  const iso = displayToIsoDate(masked);
+                  setForm((p) => ({ ...p, dateEffective: iso ?? "" }));
+                }}
+                onBlur={() => {
+                  if (
+                    dateEffectiveDisplay &&
+                    !displayToIsoDate(dateEffectiveDisplay)
+                  ) {
+                    setDateEffectiveDisplay("");
+                    setForm((p) => ({ ...p, dateEffective: "" }));
+                  }
+                }}
+                disabled={formDisabled}
+                className="w-full rounded-lg bg-white border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Định dạng: dd/mm/yyyy. Phải sau hoặc bằng ngày ban hành.
+              </p>
+            </div>
 
             {/* Cơ quan ban hành — SELECT với 2 option cố định + fallback cho data cũ */}
             <div>
