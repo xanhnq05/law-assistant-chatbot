@@ -18,6 +18,8 @@ venv/
 **/Dockerfile
 **/docker-compose*.yml
 **/.dockerignore
+**/tests/
+
 
 # rag-service KHÔNG cần các service khác lúc build
 services/auth-service/
